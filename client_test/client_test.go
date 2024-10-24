@@ -3,6 +3,12 @@ package client_test
 // You MUST NOT change these default imports.  ANY additional imports may
 // break the autograder and everyone will be sad.
 
+/*
+Types of tests 
+1) assertion test
+*/
+
+
 import (
 	// Some imports use an underscore to prevent the compiler from complaining
 	// about unused imports.
@@ -84,9 +90,44 @@ var _ = Describe("Client Tests", func() {
 		userlib.DatastoreClear()
 		userlib.KeystoreClear()
 	})
+	Describe("Design Tests", func() {
+		Specify("Design Tests: ", func() {
 
+		})
+		Describe("Stateless Design", func() {
+			Specify("Stateless Design: One Person with Two Devices Logging in", func() {
+				userlib.DebugMsg("Initializing user Alice")
+				alice, err := client.InitUser("alice", defaultPassword)
+				Expect(err).To(BeNil())
+
+				userlib.DebugMsg("Getting Alice on laptop")
+				aliceLaptop, err := client.GetUser("alice", defaultPassword)
+				Expect(err).To(BeNil())
+
+				userlib.DebugMsg("Getting Alice on phone")
+				alicePhone, err := client.GetUser("alice", defaultPassword)
+				Expect(err).To(BeNil())
+
+		})
+			Specify("Stateless Design: One Person with Two Devices accessing Datastore", func()) {
+				userlib.DebugMsg("Initializing user Alice")
+				alice, err := client.InitUser("alice", defaultPassword)
+				Expect(err).To(BeNil())
+
+				userlib.DebugMsg("Getting Alice on laptop")
+				aliceLaptop, err := client.GetUser("alice", defaultPassword)
+				Expect(err).To(BeNil())
+
+				userlib.DebugMsg("Getting Alice on phone")
+				alicePhone, err := client.GetUser("alice", defaultPassword)
+				Expect(err).To(BeNil())
+
+				err = alicePhone.StoreFile(aliceFile, []byte(contentOne))
+
+				err 
+			} 
+	})
 	Describe("Basic Tests", func() {
-
 		Specify("Basic Test: Testing InitUser/GetUser on a single user.", func() {
 			userlib.DebugMsg("Initializing user Alice.")
 			alice, err = client.InitUser("alice", defaultPassword)
