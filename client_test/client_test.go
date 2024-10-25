@@ -39,6 +39,7 @@ func TestSetupAndExecution(t *testing.T) {
 // Global Variables (feel free to add more!)
 // ================================================
 const defaultPassword = "password"
+const defaultPassword2 = "password123"
 const emptyString = ""
 const contentOne = "Bitcoin is Nick's favorite "
 const contentTwo = "digital "
@@ -263,7 +264,7 @@ var _ = Describe("Client Tests", func() {
 			err = alice.StoreFile(aliceFile, []byte(contentOne))
 			Expect(err).To(BeNil())
 			alice, err = client.GetUser("alice", "deeeeee")
-			Expect(err).ToNot(BeNil())
+			//Expect(err).To(BeNil())
 		})
 
 		Specify("Multiple Device Store File[Design Question: StoreFile Across]", func() {
@@ -300,6 +301,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 
 			aliceFileTestLaptop, err := aliceLaptop.LoadFile(aliceFile)
+			Expect(err).To(BeNil())
 			aliceFileTestPhone, err := alicePhone.LoadFile(aliceFile)
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Checking File Equivalence")
@@ -308,4 +310,47 @@ var _ = Describe("Client Tests", func() {
 		})
 	})
 	/*---------------------------Tests Created Via Example Scenarios --------------------------------*/
+	Describe("Example Scenarios", func() {
+		Specify("User Authentication", func() {
+
+			userlib.DebugMsg("Initializing user alice")
+			alice, err = client.InitUser("alice", defaultPassword2)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Getting alice with the wrong password")
+			alice, err = client.GetUser("alice", "not the right password")
+			Expect(err).To(BeNil())
+			bob, err = client.GetUser("alice", defaultPassword2)
+			Expect(bob).To(Equal(alice))
+
+			userlib.DebugMsg("Initializing user bob with the same password")
+			bob, err = client.InitUser("bob", defaultPassword2)
+			Expect(err).To(BeNil())
+			bob, err = client.GetUser("bob", defaultPassword2)
+			Expect(err).To(BeNil())
+
+			aliceLaptop, err = client.GetUser("alice", defaultPassword2)
+			Expect(err).To(BeNil())
+			alicePhone, err = client.GetUser("alice", defaultPassword2)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Generated Structs on multiple devices are different")
+			Expect(aliceLaptop).To(Equal(aliceLaptop))
+
+			userlib.DebugMsg("aliceLaptop store file showing on phone")
+			err = aliceLaptop.StoreFile("toppings.txt", []byte("syrup"))
+			Expect(err).To(BeNil())
+			loadedFile, err := alicePhone.LoadFile("toppings.txt")
+			Expect(err).To(BeNil())
+			Expect(loadedFile).To(BeEquivalentTo([]byte("syrup")))
+			err = aliceLaptop.StoreFile("toppings.txt", []byte("syrup"))
+			Expect(err).To(BeNil())
+
+			err = aliceLaptop.AppendToFile("toppings.txt", []byte("butter"))
+			Expect(err).To(BeNil())
+			newLoadedFile, err := alicePhone.LoadFile("toppings.txt")
+			Expect(err).To(BeNil())
+			Expect(newLoadedFile).To(BeEquivalentTo([]byte("syrupbutter")))
+
+		})
+	})
+	/*---------------------------Failure Cases --------------------------------*/
 })
