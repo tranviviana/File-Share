@@ -60,6 +60,13 @@ var _ = Describe("Client Tests", func() {
 	var charles *client.User
 	var EvanBot *client.User
 	var CodaBot *client.User
+	var A *client.User
+	var B *client.User
+	var C *client.User
+	var D *client.User
+	var E *client.User
+	var F *client.User
+	var G *client.User
 	// var doris *client.User
 	// var eve *client.User
 	// var frank *client.User
@@ -436,6 +443,94 @@ var _ = Describe("Client Tests", func() {
 
 			userlib.DebugMsg("Bandwidth Efficiency Testing")
 		})
+		Specify("Sharing and Revocation", func() {
+			userlib.DebugMsg("Initializing user Evanbot")
+			userlib.DebugMsg("filesharing example")
+			EvanBot, err = client.InitUser("EvanBot", defaultPassword2)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Initializing user Evanbot")
+			CodaBot, err = client.InitUser("CodaBot", defaultPassword2)
+			Expect(err).To(BeNil())
+			err = EvanBot.StoreFile("foods.txt", []byte("eggs"))
+			Expect(err).To(BeNil())
+			invitationPtr, err := EvanBot.CreateInvitation("foods.txt", "CodaBot")
+			Expect(err).To(BeNil())
+
+			err = CodaBot.AcceptInvitation("EvanBot", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+			CodaBotLoadFile, err := CodaBot.LoadFile("snacks.txt")
+			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs"))
+
+			EvanBotLoadFile, err := EvanBot.LoadFile("foods.txt.txt")
+			Expect(EvanBotLoadFile).To(BeEquivalentTo("eggs"))
+
+			err = EvanBot.AppendToFile("foods.txt", []byte("and bacon"))
+			Expect(err).To(BeNil())
+			CodaBotLoadFile, err = CodaBot.LoadFile("snacks.txt")
+			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs and bacon"))
+
+			/*
+
+				EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
+				Datastore when creating the invitation, and what is the UUID returned? What values on
+				Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
+				in the future?
+
+				CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
+				non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
+			*/
+			userlib.DebugMsg("Revocation Behavior ")
+			userlib.DebugMsg("Initializing Revocation Tree Users")
+
+			A, err = client.InitUser("A", defaultPassword2)
+			Expect(err).To(BeNil())
+			B, err = client.InitUser("B", defaultPassword2)
+			Expect(err).To(BeNil())
+			C, err = client.InitUser("C", defaultPassword2)
+			Expect(err).To(BeNil())
+			D, err = client.InitUser("D", defaultPassword2)
+			Expect(err).To(BeNil())
+			E, err = client.InitUser("E", defaultPassword2)
+			Expect(err).To(BeNil())
+			F, err = client.InitUser("F", defaultPassword2)
+			Expect(err).To(BeNil())
+			G, err = client.InitUser("G", defaultPassword2)
+			Expect(err).To(BeNil())
+
+			err = A.StoreFile("foods.txt", []byte("eggs"))
+			Expect(err).To(BeNil())
+
+			invitationPtr, err = A.CreateInvitation("foods.txt", "B")
+			Expect(err).To(BeNil())
+			err = B.AcceptInvitation("A", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+
+			invitationPtr, err = A.CreateInvitation("foods.txt", "C")
+			Expect(err).To(BeNil())
+			err = B.AcceptInvitation("C", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+
+			invitationPtr, err = C.CreateInvitation("foods.txt", "G")
+			Expect(err).To(BeNil())
+			err = G.AcceptInvitation("C", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+
+			invitationPtr, err = B.CreateInvitation("foods.txt", "D")
+			Expect(err).To(BeNil())
+			err = D.AcceptInvitation("B", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+
+			invitationPtr, err = B.CreateInvitation("foods.txt", "E")
+			Expect(err).To(BeNil())
+			err = E.AcceptInvitation("B", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+
+			invitationPtr, err = D.CreateInvitation("foods.txt", "F")
+			Expect(err).To(BeNil())
+			err = F.AcceptInvitation("D", invitationPtr, "snacks.txt")
+			Expect(err).To(BeNil())
+		})
+
 	})
 	/*---------------------------Failure Cases --------------------------------*/
 })
