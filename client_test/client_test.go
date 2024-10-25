@@ -58,6 +58,8 @@ var _ = Describe("Client Tests", func() {
 	var alice *client.User
 	var bob *client.User
 	var charles *client.User
+	var EvanBot *client.User
+	var CodaBot *client.User
 	// var doris *client.User
 	// var eve *client.User
 	// var frank *client.User
@@ -378,6 +380,61 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			Expect(newLoadedFile).To(BeEquivalentTo([]byte("syrupbutter")))
 
+		})
+		Specify("File Operations", func() {
+
+			userlib.DebugMsg("Initializing user Evanbot")
+			userlib.DebugMsg("NameSpacing example")
+			EvanBot, err = client.InitUser("EvanBot", defaultPassword2)
+			Expect(err).To(BeNil())
+			err = EvanBot.StoreFile("foods.txt", []byte("pancakes"))
+			Expect(err).To(BeNil())
+			EvanBotLoadFile, err := EvanBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("pancakes")))
+
+			err = EvanBot.StoreFile("foods.txt", []byte("cookies"))
+			Expect(err).To(BeNil())
+			EvanBotLoadFile, err = EvanBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies")))
+
+			EvanBotLoadFile, err = EvanBot.LoadFile("drinks.txt")
+			Expect(err).ToNot(BeNil())
+
+			err = EvanBot.AppendToFile("foods.txt", []byte("and pancakes"))
+			Expect(err).To(BeNil())
+			EvanBotLoadFile, err = EvanBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies and pancakes")))
+
+			err = EvanBot.AppendToFile("foods.txt", []byte("and hash browns"))
+			Expect(err).To(BeNil())
+			EvanBotLoadFile, err = EvanBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies and pancakes and hash browns")))
+
+			err = EvanBot.StoreFile("foods.txt", []byte("pancakes"))
+			Expect(err).To(BeNil())
+			EvanBotLoadFile, err = EvanBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("pancakes")))
+
+			err = EvanBot.AppendToFile("drinks.txt", []byte("and cookies"))
+			Expect(err).ToNot(BeNil())
+
+			userlib.DebugMsg("Initializing user CodaBot")
+			CodaBot, err = client.InitUser("CodaBot", defaultPassword2)
+			Expect(err).To(BeNil())
+			err = CodaBot.StoreFile("foods.txt", []byte("waffles"))
+			Expect(err).To(BeNil())
+			CodaBotLoaded, err := CodaBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
+			Expect(CodaBotLoaded).ToNot(BeEquivalentTo(EvanBotLoadFile))
+			Expect(CodaBotLoaded).To(BeEquivalentTo([]byte("waffles")))
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("pancakes")))
+
+			userlib.DebugMsg("Bandwidth Efficiency Testing")
 		})
 	})
 	/*---------------------------Failure Cases --------------------------------*/
