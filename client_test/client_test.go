@@ -712,7 +712,7 @@ var _ = Describe("Client Tests", func() {
 			alice, err = client.InitUser("Alice", defaultPassword)
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Appending to nonexistent file")
-			 err = alice.AppendToFile(aliceFile, []byte(contentOne))
+			err = alice.AppendToFile(aliceFile, []byte(contentOne))
 			Expect(err).ToNot(BeNil())
 		})
 		//Append to File with corruption error testing
@@ -748,11 +748,17 @@ var _ = Describe("Client Tests", func() {
 			bob, err = client.InitUser("Bob", defaultPassword2)
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Creating invitatation")
-			invitationPtr, err := alice.CreateInvitation(aliceFile, "bob")
+			invitationPtr, err := alice.CreateInvitation(aliceFile, "Bob")
 			Expect(err).To(BeNil())
 
+			userlib.DebugMsg("Creating file")
 			bob.StoreFile(aliceFile, []byte(contentOne))
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Accepting existing file")
+			bob.AcceptInvitation("Alice", invitationPtr, "aliceFile.txt")
+			Expect(err).ToNot(BeNil())
 			//create existing file, and invitation from external user
-	})
+		})
 
+	})
 })
