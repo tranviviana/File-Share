@@ -20,7 +20,7 @@ Partner 1 Email: tranviviana@berkeley.edu
 
 Partner 2 Name (if applicable): Cameron Leung
 
-Partner 2 SID (if applicable): 
+Partner 2 SID (if applicable): 3037386129
 
 Partner 2 Email (if applicable): cameronleung@berkeley.edu
 
