@@ -13,10 +13,12 @@ import (
 	// about unused imports.
 	_ "encoding/hex"
 	_ "errors"
+	"strconv"
 	_ "strconv"
 	_ "strings"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "github.com/google/uuid"
 
 	// A "dot" import is used here so that the functions in the ginko and gomega
@@ -346,6 +348,26 @@ var _ = Describe("Client Tests", func() {
 
 		})
 	})
+	/*----------------------------Security Tests Tampering with different pieces of data -------------*/
+	Describe("Being Malicious", func() {
+		Specify("Tampering and then making sure we can't do any file functions after that ", func() {
+			userlib.DebugMsg("Datastore mess ups!!!")
+			_, err = client.InitUser("testtest", defaultPassword)
+			Expect(err).To(BeNil())
+			var startUUID uuid.UUID
+			var startByteValue ([]byte)
+			for uuid, byteValues := range userlib.DatastoreGetMap() {
+				startUUID = uuid
+				startByteValue = byteValues
+			}
+			Expect(startByteValue).NotTo(BeNil())
+			userlib.DatastoreSet(startUUID, userlib.RandomBytes((100)))
+			/*User struct should be all messed up now*/
+			alice, err = client.GetUser("testtest", defaultPassword)
+			Expect(err).NotTo(BeNil())
+
+		})
+	})
 	/*---------------------------Tests Created Via Example Scenarios --------------------------------*/
 	Describe("Example Scenarios", func() {
 		Specify("User Authentication", func() {
@@ -441,8 +463,8 @@ var _ = Describe("Client Tests", func() {
 			Expect(CodaBotLoaded).To(BeEquivalentTo([]byte("waffles")))
 			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("pancakes")))
 
-			userlib.DebugMsg("Bandwidth Efficiency Testing")
 		})
+
 		Specify("Sharing and Revocation", func() {
 			userlib.DebugMsg("Initializing user Evanbot")
 			userlib.DebugMsg("filesharing example")
@@ -461,12 +483,14 @@ var _ = Describe("Client Tests", func() {
 			CodaBotLoadFile, err := CodaBot.LoadFile("snacks.txt")
 			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs"))
 
-			EvanBotLoadFile, err := EvanBot.LoadFile("foods.txt.txt")
+			EvanBotLoadFile, err := EvanBot.LoadFile("foods.txt")
+			Expect(err).To(BeNil())
 			Expect(EvanBotLoadFile).To(BeEquivalentTo("eggs"))
 
 			err = EvanBot.AppendToFile("foods.txt", []byte("and bacon"))
 			Expect(err).To(BeNil())
 			CodaBotLoadFile, err = CodaBot.LoadFile("snacks.txt")
+			Expect(err).To(BeNil())
 			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs and bacon"))
 
 			/*
@@ -529,8 +553,206 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			err = F.AcceptInvitation("D", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
+
+			err = A.RevokeAccess("foods.txt", "B")
+			Expect(err).To(BeNil())
+			err = A.RevokeAccess("foods.txt", "C")
+
+			loadedFile, err := B.LoadFile("snacks.txt")
+			Expect(err).ToNot(BeNil())
+			//possible error here, it should just error out and not return anything
+			Expect(loadedFile).To(BeFalse())
+
+			err = D.AppendToFile("snacks.txt", []byte("this is a mistake"))
+			Expect(err).ToNot(BeNil())
+			E.CreateInvitation("snacks.txt", "B")
+			Expect(err).ToNot(BeNil())
 		})
 
 	})
+	/*---------------------------Bandwidth Test ---------------------------------*/
+	Describe("Bandwidth/Efficiency Test", func() {
+		/*
+		   The total bandwidth should not scale with (including but not limited to):
+		       Total file size
+		       Number of files
+		       Length of the filename
+		       Number of appends
+		       Size of previous append
+		       Length of username
+		       Length of password
+		       Number of users the file is shared with
+		*/
+		//helper function
+		measureBandwidth := func(probe func()) (bandwidth int) {
+			before := userlib.DatastoreGetBandwidth()
+			probe()
+			after := userlib.DatastoreGetBandwidth()
+			return after - before
+		}
+		/*ADD testing for file adding, and for length of the file name and scaling with the size of a previous append and the number of users the file is shared with */
+		Specify("Append shouldn't scale with the quantity of files", func() {
+			userlib.DebugMsg("Append should not scale with the number of files")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("")
+		})
+
+		Specify("Append shouldn't scale with size of file but by what is added", func() {
+			userlib.DebugMsg("The total bandwidth should only scale with the size of the append and not number of appends either")
+			userlib.DebugMsg("Creating a 10k byte and a 1 byte file")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			bigBandwidth := measureBandwidth(func() {
+				err = alice.StoreFile(aliceFile, userlib.RandomBytes(10000))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("bandwidth of 10000 byte file", bigBandwidth)
+			smallBandwidth := measureBandwidth(func() {
+				err = bob.StoreFile(bobFile, []byte(("A")))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("bandwidth of 1 byte file", smallBandwidth)
+			userlib.DebugMsg("Adding bytes to each file to check bandwidth")
+			//10000 growth
+			err = alice.StoreFile(aliceFile, []byte(emptyString))
+			Expect(err).To(BeNil())
+			var newAdded [10000]int
+			for i := 0; i < 10000; i++ {
+				newAdded[i] = measureBandwidth(func() {
+					err = alice.AppendToFile(aliceFile, []byte("V"))
+					Expect(err).To(BeNil())
+				})
+			}
+			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[9999]))
+
+		})
+	})
+
 	/*---------------------------Failure Cases --------------------------------*/
+	Describe("Failure Cases", func() {
+		Specify("InitUser existing username error", func() {
+			userlib.DebugMsg("Testing InitUser where there is no existing username")
+			userlib.DebugMsg("Initializing user with a new username")
+			EvanBot, err = client.InitUser("EvanBot", defaultPassword)
+			Expect(err).To(BeNil())
+
+			userlib.DebugMsg("Initializing user with an existing username and new password")
+			CodaBot, err = client.InitUser("EvanBot", defaultPassword2)
+			Expect(err).ToNot(BeNil())
+			userlib.DebugMsg("Initializing user with an existing username and existing password")
+			CodaBot, err = client.InitUser("EvanBot", defaultPassword)
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("InitUser empty username error", func() {
+			userlib.DebugMsg("Testing InitUser where there is no initialized user for the given username")
+			userlib.DebugMsg("Initializing user with an empty username")
+			EvanBot, err = client.InitUser("", defaultPassword)
+			Expect(err).ToNot(BeNil())
+		})
+
+		Specify("GetUser user does not exist error", func() {
+			userlib.DebugMsg("Testing GetUser where there is no initialized user for the given username")
+			userlib.DebugMsg("Initializing user")
+			EvanBot, err = client.GetUser("Garbage Username", defaultPassword)
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("GetUser credentials invalid error", func() {
+			userlib.DebugMsg("Testing GetUser invalid credentials")
+			userlib.DebugMsg("Initializing user")
+			EvanBot, err = client.InitUser("Evanbot", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Getting user with incorrect password")
+			EvanBot, err = client.GetUser("Evanbot", defaultPassword2)
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("GetUser integrity error", func() {
+			userlib.DebugMsg("Testing GetUser where the User struct cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
+			userlib.DebugMsg("Initializing user")
+			EvanBot, err = client.InitUser("EvanBot", defaultPassword)
+			Expect(err).To(BeNil())
+
+			userlib.DebugMsg("Corrupting user data")
+			userUUID := EvanBot.UserUUID
+			data, err := userlib.DatastoreGet(userUUID)
+			Expect(err).To(BeNil())
+
+			// Modify the data to simulate corruption
+			corruptedData := append(data, []byte("corruption")...)
+			userlib.DatastoreSet(userUUID, corruptedData)
+
+			userlib.DebugMsg("Getting corrupted user")
+			EvanBot, err = client.GetUser("EvanBot", defaultPassword)
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("LoadFile filename does not exist error", func() {
+			userlib.DebugMsg("Testing LoadFile where the given filename does not exist in the personal file namespace of the caller")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Getting file name")
+			content, err := alice.LoadFile(aliceFile)
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("LoadFile tampering error", func() {
+			userlib.DebugMsg("Testing LoadFile where the integrity of the downloaded content cannot be verified")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Storing file")
+			err = alice.StoreFile(aliceFile, []byte(contentOne))
+			Expect(err).To(BeNil())
+
+			//corrupt alicefile here
+		})
+
+		Specify("AppendToFile filename does not exist error", func() {
+			userlib.DebugMsg("Testing AppendToFile where the given filename does not exist in the personal file namespace of the caller")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Appending to nonexistent file")
+			 err = alice.AppendToFile(aliceFile, []byte(contentOne))
+			Expect(err).ToNot(BeNil())
+		})
+		//Append to File with corruption error testing
+		Specify("CreateInvitation filename does not exist error", func() {
+			userlib.DebugMsg("Testing CreateInvitation where the given filename does not exist in the personal file namespace of the caller")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Creating Invitation to nonexistent file")
+			invitationPtr, err := alice.CreateInvitation(aliceFile, "bob")
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("CreateInvitation file recipient does not exist error", func() {
+			userlib.DebugMsg("Testing CreateInvitation where the given recipientUsername does not exist")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Storing File")
+			err = alice.StoreFile(aliceFile, []byte(contentOne))
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Creating Invitation with nonexistent recipient")
+			invitationPtr, err := alice.CreateInvitation(aliceFile, "dummy recipient")
+			Expect(err).ToNot(BeNil())
+		})
+		//CreateInvitiation with corruption error testing
+		Specify("AcceptInvitation filename already exists error", func() {
+			userlib.DebugMsg("Testing AcceptInvitation where the user already has a file with the chosen filename in their personal file namespace")
+			userlib.DebugMsg("Initializing user 1")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+
+			userlib.DebugMsg("Initializing user")
+			bob, err = client.InitUser("Bob", defaultPassword2)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Creating invitatation")
+			invitationPtr, err := alice.CreateInvitation(aliceFile, "bob")
+			Expect(err).To(BeNil())
+
+			bob.StoreFile(aliceFile, []byte(contentOne))
+			//create existing file, and invitation from external user
+	})
+
 })
