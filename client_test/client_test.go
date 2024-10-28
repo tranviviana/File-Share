@@ -295,7 +295,7 @@ var _ = Describe("Client Tests", func() {
 			userlib.DebugMsg("Checking File Equivalence for one loaded file")
 			Expect(aliceFileTest).To(BeEquivalentTo(contentOne))
 		})
-		Specify("Multiple Device Append File[Design Question: Append Across]", func() {
+		Specify("Multiple Device Append File[Design Question: Append Across different devices]", func() {
 			userlib.DebugMsg("Initializing user Alice")
 			alice, err = client.InitUser("alice", defaultPassword)
 			Expect(err).To(BeNil())
@@ -321,7 +321,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(aliceFileTestPhone).To(BeEquivalentTo([]byte(contentOne + contentTwo)))
 
 		})
-		Specify("Multiple Device DOUBLE Store File[Design Question: Multiple Devices]", func() {
+		Specify("Multiple Device DOUBLE Store File[Design Question: Multiple Devices Storing]", func() {
 			userlib.DebugMsg("Initializing user Alice")
 			alice, err = client.InitUser("alice", defaultPassword)
 			Expect(err).To(BeNil())
@@ -428,7 +428,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies")))
 
-			EvanBotLoadFile, err = EvanBot.LoadFile("drinks.txt")
+			_, err = EvanBot.LoadFile("drinks.txt")
 			Expect(err).ToNot(BeNil())
 
 			err = EvanBot.AppendToFile("foods.txt", []byte("and pancakes"))
@@ -465,7 +465,7 @@ var _ = Describe("Client Tests", func() {
 
 		})
 
-		Specify("Sharing and Revocation", func() {
+		Specify("Sharing", func() {
 			userlib.DebugMsg("Initializing user Evanbot")
 			userlib.DebugMsg("filesharing example")
 			EvanBot, err = client.InitUser("EvanBot", defaultPassword2)
@@ -492,17 +492,18 @@ var _ = Describe("Client Tests", func() {
 			CodaBotLoadFile, err = CodaBot.LoadFile("snacks.txt")
 			Expect(err).To(BeNil())
 			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs and bacon"))
+		})
+		/*
 
-			/*
+			EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
+			Datastore when creating the invitation, and what is the UUID returned? What values on
+			Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
+			in the future?
 
-				EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
-				Datastore when creating the invitation, and what is the UUID returned? What values on
-				Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
-				in the future?
-
-				CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
-				non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
-			*/
+			CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
+			non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
+		*/
+		Specify("Revocation", func() {
 			userlib.DebugMsg("Revocation Behavior ")
 			userlib.DebugMsg("Initializing Revocation Tree Users")
 
@@ -524,7 +525,7 @@ var _ = Describe("Client Tests", func() {
 			err = A.StoreFile("foods.txt", []byte("eggs"))
 			Expect(err).To(BeNil())
 
-			invitationPtr, err = A.CreateInvitation("foods.txt", "B")
+			invitationPtr, err := A.CreateInvitation("foods.txt", "B")
 			Expect(err).To(BeNil())
 			err = B.AcceptInvitation("A", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
@@ -557,6 +558,7 @@ var _ = Describe("Client Tests", func() {
 			err = A.RevokeAccess("foods.txt", "B")
 			Expect(err).To(BeNil())
 			err = A.RevokeAccess("foods.txt", "C")
+			Expect(err).To(BeNil())
 
 			loadedFile, err := B.LoadFile("snacks.txt")
 			Expect(err).ToNot(BeNil())
@@ -666,25 +668,53 @@ var _ = Describe("Client Tests", func() {
 			EvanBot, err = client.GetUser("Evanbot", defaultPassword2)
 			Expect(err).ToNot(BeNil())
 		})
-		/*		Specify("GetUser integrity error", func() {
-				userlib.DebugMsg("Testing GetUser where the User struct cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
+		Specify("GetUser content integrity error", func() {
+			userlib.DebugMsg("Testing GetUser where the User struct cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
+			userlib.DebugMsg("Initializing user")
+			EvanBot, err = client.InitUser("EvanBot", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Corrupting user data")
+			var startByteValue ([]byte)
+			for _, byteValues := range userlib.DatastoreGetMap() {
+				startByteValue = byteValues
+			}
+			Expect(err).To(BeNil())
+			//content has changed
+			_, err = client.GetUser("EvanBot", defaultPassword)
+			Expect(startByteValue).NotTo(BeNil())
+		})
+		/*
+			Specify("GetUser UID Integrity Error", func() {
+				userlib.DebugMsg("Testing GetUser where the User struct address cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
 				userlib.DebugMsg("Initializing user")
+				dataMap := userlib.DatastoreGetMap()
+				var beforeSnapShot ([]uuid.UUID)
+				for key1 := range dataMap {
+					beforeSnapShot = append(key1)
+				}
+				var afterSnapShot ([]uuid.UUID)
 				EvanBot, err = client.InitUser("EvanBot", defaultPassword)
-				Expect(err).To(BeNil())
+				dataMap = userlib.DatastoreGetMap()
+				for key2 := range dataMap {
+					afterSnapShot = append(key2)
+				}
+				afterSnapShot := list(data_map.keys())
 
-				userlib.DebugMsg("Corrupting user data")
-				userUUID := EvanBot.UserUUID
-				data, err := userlib.DatastoreGet(userUUID)
-				Expect(err).To(BeNil())
 
-				// Modify the data to simulate corruption
-				corruptedData := append(data, []byte("corruption")...)
-				userlib.DatastoreSet(userUUID, corruptedData)
-
-				userlib.DebugMsg("Getting corrupted user")
-				EvanBot, err = EvanBot.GetUser("EvanBot", defaultPassword)
+				var addedUUID []string
+				for item := range afterMap {
+					if beforeSnapShot[item] != afterSnapShot[item] {
+						addedUUID = append(afterSnapshot[item])
+					}
+				}
+				userlib.DatastoreSet(addedUUID[0], []byte( "changed struct address"))
+				// should theoretically return the added UUID
+				userlib.DebugMsg("Corrupting user location")
+				_, err = client.GetUser("Evanbot",defaultPassword)
 				Expect(err).ToNot(BeNil())
+
 			})*/
+
 		Specify("LoadFile filename does not exist error", func() {
 			userlib.DebugMsg("Testing LoadFile where the given filename does not exist in the personal file namespace of the caller")
 			userlib.DebugMsg("Initializing user")
@@ -694,17 +724,19 @@ var _ = Describe("Client Tests", func() {
 			_, err := alice.LoadFile(aliceFile)
 			Expect(err).ToNot(BeNil())
 		})
-		Specify("LoadFile tampering error", func() {
-			userlib.DebugMsg("Testing LoadFile where the integrity of the downloaded content cannot be verified")
-			userlib.DebugMsg("Initializing user")
-			alice, err = client.InitUser("Alice", defaultPassword)
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("Storing file")
-			err = alice.StoreFile(aliceFile, []byte(contentOne))
-			Expect(err).To(BeNil())
+		/*
+			Specify("LoadFile tampering error", func() {
+				userlib.DebugMsg("Testing LoadFile where the integrity of the downloaded content cannot be verified")
+				userlib.DebugMsg("Initializing user")
+				alice, err = client.InitUser("Alice", defaultPassword)
+				Expect(err).To(BeNil())
+				userlib.DebugMsg("Storing file")
+				err = alice.StoreFile(aliceFile, []byte(contentOne))
+				Expect(err).To(BeNil())
 
-			//corrupt alicefile here
-		})
+				//corrupt alicefile here
+			})
+		*/
 
 		Specify("AppendToFile filename does not exist error", func() {
 			userlib.DebugMsg("Testing AppendToFile where the given filename does not exist in the personal file namespace of the caller")
