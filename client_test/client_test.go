@@ -428,7 +428,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies")))
 
-			_, err = EvanBot.LoadFile("drinks.txt")
+			EvanBotLoadFile, err = EvanBot.LoadFile("drinks.txt")
 			Expect(err).ToNot(BeNil())
 
 			err = EvanBot.AppendToFile("foods.txt", []byte("and pancakes"))
@@ -493,17 +493,18 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs and bacon"))
 		})
-		/*
+			/*
 
-			EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
-			Datastore when creating the invitation, and what is the UUID returned? What values on
-			Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
-			in the future?
+				EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
+				Datastore when creating the invitation, and what is the UUID returned? What values on
+				Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
+				in the future?
 
-			CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
-			non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
-		*/
-		Specify("Revocation", func() {
+				CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
+				non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
+			*/
+
+			Specify("Revocation", func() {
 			userlib.DebugMsg("Revocation Behavior ")
 			userlib.DebugMsg("Initializing Revocation Tree Users")
 
@@ -668,6 +669,29 @@ var _ = Describe("Client Tests", func() {
 			EvanBot, err = client.GetUser("Evanbot", defaultPassword2)
 			Expect(err).ToNot(BeNil())
 		})
+
+		
+		Specify("LoadFile filename does not exist error", func() {
+			userlib.DebugMsg("Testing LoadFile where the given filename does not exist in the personal file namespace of the caller")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Getting file name")
+			_, err := alice.LoadFile(aliceFile)
+			Expect(err).ToNot(BeNil())
+		})
+		Specify("LoadFile tampering error", func() {
+			userlib.DebugMsg("Testing LoadFile where the integrity of the downloaded content cannot be verified")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("Alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Storing file")
+			err = alice.StoreFile(aliceFile, []byte(contentOne))
+			Expect(err).To(BeNil())
+
+			//corrupt alicefile here
+		})
+
 		Specify("GetUser content integrity error", func() {
 			userlib.DebugMsg("Testing GetUser where the User struct cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
 			userlib.DebugMsg("Initializing user")
@@ -737,6 +761,7 @@ var _ = Describe("Client Tests", func() {
 				//corrupt alicefile here
 			})
 		*/
+
 
 		Specify("AppendToFile filename does not exist error", func() {
 			userlib.DebugMsg("Testing AppendToFile where the given filename does not exist in the personal file namespace of the caller")
