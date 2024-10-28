@@ -756,7 +756,7 @@ var _ = Describe("Client Tests", func() {
 			userlib.DebugMsg("Creating file 2")
 			bob.StoreFile(aliceFile, []byte(contentOne))
 			Expect(err).To(BeNil())
-			
+
 			userlib.DebugMsg("Creating invitatation")
 			invitationPtr, err := alice.CreateInvitation(aliceFile, "Bob")
 			Expect(err).To(BeNil())
@@ -777,9 +777,9 @@ var _ = Describe("Client Tests", func() {
 			userlib.DebugMsg("Initializing user 2")
 			bob, err = client.InitUser("Bob", defaultPassword2)
 			Expect(err).To(BeNil())
-			
+
 			userlib.DebugMsg("Creating invitatation")
-			invitationPtr, err := alice.CreateInvitation(aliceFile, "Bob")
+			_, err := alice.CreateInvitation(aliceFile, "Bob")
 			Expect(err).To(BeNil())
 
 			userlib.DebugMsg("Accepting nil uuid file")
@@ -798,12 +798,12 @@ var _ = Describe("Client Tests", func() {
 			userlib.DebugMsg("Initializing user 2")
 			bob, err = client.InitUser("Bob", defaultPassword2)
 			Expect(err).To(BeNil())
-			
+
 			userlib.DebugMsg("Creating invitatation")
 			invitationPtr, err := alice.CreateInvitation(aliceFile, "Bob")
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Revoking access")
-			err = alice.revokeAccess("aliceFile.txt", "Bob")
+			err = alice.RevokeAccess("aliceFile.txt", "Bob")
 			Expect(err).To(BeNil())
 
 			userlib.DebugMsg("Accepting revoked file")
@@ -819,7 +819,7 @@ var _ = Describe("Client Tests", func() {
 			bob, err = client.InitUser("Bob", defaultPassword2)
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Revoking Access to nonexistent file")
-			 err = alice.revokeAccess("aliceFile.txt", "Bob")
+			err = alice.RevokeAccess("aliceFile.txt", "Bob")
 			Expect(err).ToNot(BeNil())
 		})
 		Specify("RevokeInvitation filename isn't shared with recipient error", func() {
@@ -835,8 +835,8 @@ var _ = Describe("Client Tests", func() {
 			bob, err = client.InitUser("Bob", defaultPassword2)
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Revoking Access to file that bob user 2 have")
-			err = alice.revokeAccess("aliceFile.txt", "Bob")
-			Expect(err).ToNot(BeNil()) 
+			err = alice.RevokeAccess("aliceFile.txt", "Bob")
+			Expect(err).ToNot(BeNil())
 		})
 		//error for malicious action in revokeaccess
 	})
