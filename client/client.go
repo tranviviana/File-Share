@@ -108,23 +108,52 @@ func someUsefulThings() {
 // This is the type definition for the User struct.
 // A Go struct is like a Python or Java class - it can have attributes
 // (e.g. like the Username attribute) and methods (e.g. like the StoreFile method below).
+/*------------------------STRUCT SECTION ---------------------------*/
 type User struct {
-	Username string
+	//simply hashed
+	Username     string
+	PublicKey    userlib.PKEEncKey
+	Verification userlib.DSVerifyKey
 
-	// You can add other attributes here if you want! But note that in order for attributes to
-	// be included when this struct is serialized to/from JSON, they must be capitalized.
-	// On the flipside, if you have an attribute that you want to be able to access from
-	// this struct's methods, but you DON'T want that value to be included in the serialized value
-	// of this struct that's stored in datastore, then you can use a "private" variable (e.g. one that
-	// begins with a lowercase letter).
+	//HashKDF Protected
+	PrivateKey   userlib.PKEEncKey
+	SignatureKey userlib.DSSignKey
+	Files        map[string]uuid.UUID
 }
+
+// You can add other attributes here if you want! But note that in order for attributes to
+// be included when this struct is serialized to/from JSON, they must be capitalized.
+// On the flipside, if you have an attribute that you want to be able to access from
+// this struct's methods, but you DON'T want that value to be included in the serialized value
+// of this struct that's stored in datastore, then you can use a "private" variable (e.g. one that
+// begins with a lowercase letter).
+type File struct {
+	CommChannel        userlib.UUID
+	fileContentPointer userlib.UUID //randomized and then do counter to hashKDF and get fileContentStruct
+	FileLength         uint
+}
+type FileContent struct {
+	BlockEncrypted string
+}
+type CommunicationsChannel struct {
+	//In progress
+}
+
+/*---------------------------Helper Functions-------------------------*/
 
 // NOTE: The following methods have toy (insecure!) implementations.
 
 func InitUser(username string, password string) (userdataptr *User, err error) {
+	if len(username) == 0 {
+		return nil, errors.New("error") //error statement for empty username
+	}
+
+	//hashedUsername := userlib.Hash([]byte(username))
+
 	var userdata User
 	userdata.Username = username
 	return &userdata, nil
+	//return &userdataptr, nil
 }
 
 func GetUser(username string, password string) (userdataptr *User, err error) {
