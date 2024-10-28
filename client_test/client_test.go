@@ -683,37 +683,38 @@ var _ = Describe("Client Tests", func() {
 			_, err = client.GetUser("EvanBot", defaultPassword)
 			Expect(startByteValue).NotTo(BeNil())
 		})
-		/*
-			Specify("GetUser UID Integrity Error", func() {
-				userlib.DebugMsg("Testing GetUser where the User struct address cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
-				userlib.DebugMsg("Initializing user")
-				dataMap := userlib.DatastoreGetMap()
-				var beforeSnapShot ([]uuid.UUID)
-				for key1 := range dataMap {
-					beforeSnapShot = append(key1)
-				}
-				var afterSnapShot ([]uuid.UUID)
-				EvanBot, err = client.InitUser("EvanBot", defaultPassword)
-				dataMap = userlib.DatastoreGetMap()
-				for key2 := range dataMap {
-					afterSnapShot = append(key2)
-				}
-				afterSnapShot := list(data_map.keys())
 
+		Specify("GetUser UID Integrity Error", func() {
+			userlib.DebugMsg("Testing GetUser where the User struct address cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
+			userlib.DebugMsg("Initializing user")
+			dataMap := userlib.DatastoreGetMap()
+			var beforeSnapShot ([]uuid.UUID)
+			for key1 := range dataMap {
+				beforeSnapShot = append(beforeSnapShot, key1)
+			}
+			var afterSnapShot ([]uuid.UUID)
+			EvanBot, err = client.InitUser("EvanBot", defaultPassword)
+			dataMap = userlib.DatastoreGetMap()
+			for key2 := range dataMap {
+				afterSnapShot = append(afterSnapShot, key2)
 
-				var addedUUID []string
-				for item := range afterMap {
-					if beforeSnapShot[item] != afterSnapShot[item] {
-						addedUUID = append(afterSnapshot[item])
-					}
+			}
+
+			//finding the different UUID (would be the key that is different in the after situation than the start) struct uuid
+			var addedUUID ([]uuid.UUID)
+			for item := range afterSnapShot {
+				if beforeSnapShot[item] != afterSnapShot[item] {
+					differentItem := afterSnapShot[item]
+					addedUUID = append(addedUUID, differentItem)
 				}
-				userlib.DatastoreSet(addedUUID[0], []byte( "changed struct address"))
-				// should theoretically return the added UUID
-				userlib.DebugMsg("Corrupting user location")
-				_, err = client.GetUser("Evanbot",defaultPassword)
-				Expect(err).ToNot(BeNil())
+			}
+			userlib.DatastoreSet(addedUUID[0], []byte("changed struct address"))
+			// should theoretically return the added UUID
+			userlib.DebugMsg("Corrupting user location")
+			_, err = client.GetUser("Evanbot", defaultPassword)
+			Expect(err).ToNot(BeNil())
 
-			})*/
+		})
 
 		Specify("LoadFile filename does not exist error", func() {
 			userlib.DebugMsg("Testing LoadFile where the given filename does not exist in the personal file namespace of the caller")
