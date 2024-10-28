@@ -119,6 +119,7 @@ type User struct {
 	PrivateKey   userlib.PKEEncKey
 	SignatureKey userlib.DSSignKey
 	Files        map[string]uuid.UUID
+	FileToUsers  map[string]uuid.UUID //file to tree struct
 }
 
 // You can add other attributes here if you want! But note that in order for attributes to
@@ -127,6 +128,9 @@ type User struct {
 // this struct's methods, but you DON'T want that value to be included in the serialized value
 // of this struct that's stored in datastore, then you can use a "private" variable (e.g. one that
 // begins with a lowercase letter).
+type CommunicationsTree struct {
+	UsernameMap []byte //hashKDF and MAC only owner can change
+}
 type File struct {
 	CommChannel        userlib.UUID
 	fileContentPointer userlib.UUID //randomized and then do counter to hashKDF and get fileContentStruct
@@ -136,8 +140,11 @@ type FileContent struct {
 	BlockEncrypted string
 }
 type CommunicationsChannel struct {
-	//In progress
+	FileAddress []userlib.UUID //RSA Encrypted
+
 }
+
+/*need to flush store and share file revocation situation*/
 
 /*---------------------------Helper Functions-------------------------*/
 
@@ -145,10 +152,24 @@ type CommunicationsChannel struct {
 
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	if len(username) == 0 {
-		return nil, errors.New("error") //error statement for empty username
+		return nil, errors.New("Username cannot be empty") //error statement for empty username
 	}
 
-	//hashedUsername := userlib.Hash([]byte(username))
+	hashedUsername := userlib.Hash([]byte(username))
+	hashedPassword := userlib.Argon2Key(userlib.Hash([]byte(password)), hashedUsername, 128)
+	comboUserandPass := append(hashedUsername, userlib.Hash([]byte(password))...)
+	hashedUserPass := userlib.Argon2Key((comboUserandPass), hashedUsername, 128)
+	//need to MAC hashedUserPass
+
+	encryptionAndMacKey, err := userlib.HashKDF(hashedUserPass, []byte("user datastore login"))
+	if err != nil {
+		return nil, errors.New("Couldn't create protection key for Datastore storing login")
+	}
+
+	createdUUID, err := uuid.FromBytes(hashedUserPass)
+	if err != nil {
+		return nil, errors.New("Couldn't convert user log in into a UUID")
+	}
 
 	var userdata User
 	userdata.Username = username
