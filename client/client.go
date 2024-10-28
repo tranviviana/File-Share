@@ -161,12 +161,12 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	hashedUserPass := userlib.Argon2Key((comboUserandPass), hashedUsername, 128)
 	//need to MAC hashedUserPass
 
-	encryptionAndMacKey, err := userlib.HashKDF(hashedUserPass, []byte("user datastore login"))
 	if err != nil {
 		return nil, errors.New("Couldn't create protection key for Datastore storing login")
 	}
 
-	createdUUID, err := uuid.FromBytes(hashedUserPass)
+	createdUUID, err := uuid.FromBytes(hashedUserPass) // connect to the struct but struct needs to be encrypted with reliance to username and password
+
 	if err != nil {
 		return nil, errors.New("Couldn't convert user log in into a UUID")
 	}
