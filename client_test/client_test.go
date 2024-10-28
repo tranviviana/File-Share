@@ -596,9 +596,29 @@ var _ = Describe("Client Tests", func() {
 		/*ADD testing for file adding, and for length of the file name and scaling with the size of a previous append and the number of users the file is shared with */
 		Specify("Append shouldn't scale with the quantity of files", func() {
 			userlib.DebugMsg("Append should not scale with the number of files")
+			userlib.DebugMsg("Initializing user 1")
 			alice, err = client.InitUser("alice", defaultPassword)
 			Expect(err).To(BeNil())
-			userlib.DebugMsg("")
+			userlib.DebugMsg("Scaling up quantity of files")
+			for i:=0; i<1000; i++ {
+				iFile := fmt.Sprintf("%d.txt", i)
+				err = alice.StoreFile(iFile, []byte(emptyString))
+				Expect(err).To(BeNil())
+			}
+			userlib.DebugMsg("Measuring AppendToFile with high quantity of files")
+			bigBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile("extraFile.txt", []byte(emptyString))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Initializing user 2")
+			bob, err = client.InitUser("bob", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Measuring AppendToFile with low quantity of files")
+			smallBandwidth := measureBandwidth(func() {
+				err = bob.AppendToFile("extraFile.txt", []byte(emptyString))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference between AppendToFiles where quantity of files is different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
 		})
 
 		Specify("Append shouldn't scale with size of file but by what is added", func() {
@@ -707,7 +727,7 @@ var _ = Describe("Client Tests", func() {
 			_, err = client.GetUser("EvanBot", defaultPassword)
 			Expect(startByteValue).NotTo(BeNil())
 		})
-		/*
+		
 			Specify("GetUser UID Integrity Error", func() {
 				userlib.DebugMsg("Testing GetUser where the User struct address cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
 				userlib.DebugMsg("Initializing user")
@@ -737,7 +757,7 @@ var _ = Describe("Client Tests", func() {
 				_, err = client.GetUser("Evanbot",defaultPassword)
 				Expect(err).ToNot(BeNil())
 
-			})*/
+			})
 
 		Specify("LoadFile filename does not exist error", func() {
 			userlib.DebugMsg("Testing LoadFile where the given filename does not exist in the personal file namespace of the caller")
