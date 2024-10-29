@@ -261,11 +261,11 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//basis keys
 	hashedUsername := userlib.Hash(byteUsername)
 	hashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
-	comboUserandPass := append(hashedUsername, userlib.Hash(bytePassword)...)
-	hashedUserPass := userlib.Argon2Key((comboUserandPass), hashedUsername, 128) //for createdUUID
+	//comboUserandPass := append(hashedUsername, userlib.Hash(bytePassword)...)
+	//hashedUserPass := userlib.Argon2Key((comboUserandPass), hashedUsername, 128) //for createdUUID
 
 	//check for existing UUID
-	createdUUID, err := uuid.FromBytes(hashedUserPass) // connect to the struct but struct needs to be encrypted with reliance to username and password
+	createdUUID, err := uuid.FromBytes(hashedUsername)
 	if err != nil {
 		return nil, errors.New("couldn't convert user log in into a UUID")
 	}
