@@ -152,17 +152,17 @@ type CommunicationsChannel struct {
 
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	if len(username) == 0 {
-		return nil, errors.New("Username cannot be empty") //error statement for empty username
+		return nil, errors.New("username cannot be empty") //error statement for empty username
 	}
 	///convert to byte
 	byteUsername, err := json.Marshal(username)
 	if err != nil {
-		return nil, errors.New("Could not convert username to bytes")
+		return nil, errors.New("could not convert username to bytes")
 	}
 	//convert to byte
 	bytePassword, err := json.Marshal(password)
 	if err != nil {
-		return nil, errors.New("Could not convert password to bytes")
+		return nil, errors.New("could not convert password to bytes")
 	}
 	//basis keys
 	hashedUsername := userlib.Hash(byteUsername)
@@ -173,54 +173,54 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//Assymetric Keys
 	publicKey, privateKey, err := userlib.PKEKeyGen()
 	if err != nil {
-		return nil, errors.New("Could not generate RSA keys")
+		return nil, errors.New("could not generate RSA keys")
 	}
 	signingKey, verificationKey, err := userlib.DSKeyGen()
 	if err != nil {
-		return nil, errors.New("Could no generate signature Keys")
+		return nil, errors.New("could no generate signature Keys")
 	}
 	//check for existing UUID
 	createdUUID, err := uuid.FromBytes(hashedUserPass) // connect to the struct but struct needs to be encrypted with reliance to username and password
 	if err != nil {
-		return nil, errors.New("Couldn't convert user log in into a UUID")
+		return nil, errors.New("xouldn't convert user log in into a UUID")
 	}
 	_, ok := userlib.DatastoreGet(uuid.UUID(userlib.Hash(createdUUID[:])))
 	if ok == true {
 		//if value exists
-		return nil, errors.New("Username already exists")
+		return nil, errors.New("username already exists")
 	}
 	//convert from byte BACK
 	var stringHashedUsername string
 	err = json.Unmarshal(hashedUsername, &stringHashedUsername)
 	if err != nil {
-		return nil, errors.New("Could not unmarshal hashed username")
+		return nil, errors.New("could not unmarshal hashed username")
 	}
 
 	//setting RSA Encryption Keys
 	//putting RSA public key into keystore to prevent tampering
 	err = userlib.KeystoreSet(stringHashedUsername, publicKey)
 	if err != nil {
-		return nil, errors.New("Could not keystore set the public key")
+		return nil, errors.New("could not keystore set the public key")
 	}
 	//convert to byte
 	byteHardCodedText, err := json.Marshal("RSA Private Key Encryption Key")
 	if err != nil {
-		return nil, errors.New("Could not marshal for private key")
+		return nil, errors.New("could not marshal for private key")
 	}
 	//handling private key case
 	keyForPrivateEncryption, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
 	if err != nil {
-		return nil, errors.New("Could not create key for RSA key encryption")
+		return nil, errors.New("could not create key for RSA key encryption")
 	}
 	encryptionKeyPrivateEncryption := keyForPrivateEncryption[:16]
 
 	byteHardCodedText, err = json.Marshal("RSA MAC Key")
 	if err != nil {
-		return nil, errors.New("Could not marshal for RSA Mac Key")
+		return nil, errors.New("could not marshal for RSA Mac Key")
 	}
 	keyForPrivateMAC, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
 	if err != nil {
-		return nil, errors.New("Could not create key for RSA MAC Tag")
+		return nil, errors.New("could not create key for RSA MAC Tag")
 	}
 	macKeyPrivate := keyForPrivateMAC[0:16]
 	RSAIV := userlib.RandomBytes(16)
@@ -228,12 +228,12 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
 	privateKeyBytes, err := json.Marshal(privateKey)
 	if err != nil {
-		return nil, errors.New("Could not convert private key into bytes")
+		return nil, errors.New("could not convert private key into bytes")
 	}
 	encryptedRSAPrivateKey := userlib.SymEnc(encryptionKeyPrivateEncryption, RSAIV, privateKeyBytes)
 	tagEncryptedRSAPrivateKey, err := userlib.HMACEval(userlib.Hash(macKeyPrivate), encryptedRSAPrivateKey)
 	if err != nil {
-		return nil, errors.New("Could not generate MAC tag for encrypted RSA private Key")
+		return nil, errors.New("could not generate MAC tag for encrypted RSA private Key")
 	}
 	//full encrypted and mac tagged RSA private key
 	structRSAPrivateKey := append(tagEncryptedRSAPrivateKey, encryptedRSAPrivateKey...)
@@ -242,44 +242,44 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	var stringDoubleHashUsername string
 	err = json.Unmarshal(userlib.Hash(hashedUsername), &stringDoubleHashUsername)
 	if err != nil {
-		return nil, errors.New("Could not unmarshal hashed username")
+		return nil, errors.New("could not unmarshal hashed username")
 	}
 	//setting RSA Signature Keys
 	err = userlib.KeystoreSet(stringDoubleHashUsername, verificationKey)
 	if err != nil {
-		return nil, errors.New("Could not keystore set the signature public key")
+		return nil, errors.New("could not keystore set the signature public key")
 	}
 
 	//handling private key case
 	//convert to byte
 	byteHardCodedText, err = json.Marshal("RSA Digital Signature Encryption Key")
 	if err != nil {
-		return nil, errors.New("Could not marshal for Signature Key")
+		return nil, errors.New("could not marshal for Signature Key")
 	}
 	keyForSignature, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
 	if err != nil {
-		return nil, errors.New("Could not HASHKDF key for Signature encryption")
+		return nil, errors.New("could not HASHKDF key for Signature encryption")
 	}
 	encryptionKeySignature := keyForSignature[0:16]
 	//convert to byte
 	byteHardCodedText, err = json.Marshal("RSA Digital Signature Mac Key")
 	if err != nil {
-		return nil, errors.New("Could not marshal for Signature Key")
+		return nil, errors.New("could not marshal for Signature Key")
 	}
 	keyForSignatureMac, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
 	if err != nil {
-		return nil, errors.New("Could not HASHKDF mac for Signature Tag")
+		return nil, errors.New("could not HASHKDF mac for Signature Tag")
 	}
 	macKeySignature := keyForSignatureMac[0:16]
 	SignatureIV := userlib.RandomBytes(16)
 	signingKeyBytes, err := json.Marshal(signingKey)
 	if err != nil {
-		return nil, errors.New("Could not convert signing key into bytes")
+		return nil, errors.New("could not convert signing key into bytes")
 	}
 	encryptedSignatureKey := userlib.SymEnc(encryptionKeySignature, SignatureIV, signingKeyBytes)
 	tagEncryptedSignatureKey, err := userlib.HMACEval(userlib.Hash(macKeySignature), encryptedSignatureKey)
 	if err != nil {
-		return nil, errors.New("Could not generate MAC tag for encrypted Signature Key")
+		return nil, errors.New("could not generate MAC tag for encrypted Signature Key")
 	}
 	//full encrypted and mac tagged signature key
 	structSignatureKey := append(tagEncryptedSignatureKey, encryptedSignatureKey...)
