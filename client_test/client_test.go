@@ -594,30 +594,7 @@ var _ = Describe("Client Tests", func() {
 			return after - before
 		}
 		/*ADD testing for file adding, and for length of the file name and scaling with the size of a previous append and the number of users the file is shared with */
-		Specify("Append shouldn't scale with the length of the password", func() {
-			userlib.DebugMsg("AppendToFile shouldn't scale with the file name")
-			userlib.DebugMsg("Initializing user")
-			alice, err = client.InitUser("alice", "A")
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("Measuring AppendToFile where password is small")
-			err = alice.StoreFile(aliceFile, []byte(emptyString))
-			Expect(err).To(BeNil())
-			smallBandwidth := measureBandwidth(func() {
-				err = alice.AppendToFile(aliceFile, "A")
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Measuring AppendToFile where password is large")
-			longPassword := strings.Repeat("B", 1000)
-			bob, err = client.InitUser("bob", longPassword)
-			Expect(err).To(BeNil())
-			err = bob.StoreFile(bobFile, []byte(emptyString))
-			Expect(err).To(BeNil())
-			bigBandwidth := measureBandwidth(func() {
-				err = bob.AppendToFile(bobFile, "B")
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Difference between AppendToFile where file name lengths are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
-		})
+
 		Specify("Append shouldn't scale with the length of the username", func() {
 			userlib.DebugMsg("AppendToFile shouldn't scale with the username")
 			userlib.DebugMsg("Initializing user")
@@ -644,6 +621,58 @@ var _ = Describe("Client Tests", func() {
 				Expect(err).To(BeNil())
 			})
 			userlib.DebugMsg("Difference between AppendToFile where username lengths are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
+		})
+		Specify("Append shouldn't scale with the length of the password", func() {
+			userlib.DebugMsg("AppendToFile shouldn't scale with the file name")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("alice", "A")
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Measuring AppendToFile where password is small")
+			err = alice.StoreFile(aliceFile, []byte(emptyString))
+			Expect(err).To(BeNil())
+			smallBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Measuring AppendToFile where password is large")
+			longPassword := strings.Repeat("B", 1000)
+			bob, err = client.InitUser("bob", longPassword)
+			Expect(err).To(BeNil())
+			err = bob.StoreFile(bobFile, []byte(emptyString))
+			Expect(err).To(BeNil())
+			bigBandwidth := measureBandwidth(func() {
+				err = bob.AppendToFile(bobFile, "B")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference between AppendToFile where file name lengths are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
+		})
+		Specify("Append shouldn't scale with shared users", func() {
+			userlib.DebugMsg("AppendToFile shouldn't scale with the shared users")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Creating file")
+			err = alice.StoreFile(aliceFile, []byte(emptyString))
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Appending to file with no shared users")
+			smallBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Sharing file with many users")
+			for i:=0; i<1000; i++ {
+				newSharedUser, err := client.InitUser(strconv.Itoa(i), defaultPassword)
+				Expect(err).To(BeNil())
+				invitationPtr, err = alice.CreateInvitation(aliceFile, strconv.Itoa(i))
+				Expect(err).To(BeNil())
+				err = newSharedUser.AcceptInvitation("alice", invitationPtr, aliceFile)
+				Expect(err).To(BeNil())
+			}
+			smallBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference between AppendToFile where shared user quantities are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
 		})
 		Specify("Append shouldn't scale with the length of the file name", func() {
 			userlib.DebugMsg("AppendToFile shouldn't scale with the file name")
