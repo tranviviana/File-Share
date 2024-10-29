@@ -267,7 +267,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//check for existing UUID
 	createdUUID, err := uuid.FromBytes(hashedUserPass) // connect to the struct but struct needs to be encrypted with reliance to username and password
 	if err != nil {
-		return nil, errors.New("xouldn't convert user log in into a UUID")
+		return nil, errors.New("couldn't convert user log in into a UUID")
 	}
 	_, ok := userlib.DatastoreGet(uuid.UUID(userlib.Hash(createdUUID[:])))
 	if ok {
@@ -295,9 +295,8 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 
 	verificationKey, structSignatureKey, err := UserSignatureKeys(stringDoubleHashUsername, hashedPassword)
 	if err != nil {
-		return nil, errors.New("Signature key generation error")
+		return nil, errors.New("signature key generation error")
 	}
-	//setting RSA Signature Keys
 
 	//delete this line... just for error case
 	//print(structRSAPrivateKey, structSignatureKey)
