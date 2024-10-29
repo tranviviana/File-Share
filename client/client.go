@@ -185,7 +185,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		return nil, errors.New("xouldn't convert user log in into a UUID")
 	}
 	_, ok := userlib.DatastoreGet(uuid.UUID(userlib.Hash(createdUUID[:])))
-	if ok == true {
+	if ok {
 		//if value exists
 		return nil, errors.New("username already exists")
 	}
