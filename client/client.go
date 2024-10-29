@@ -111,9 +111,10 @@ func someUsefulThings() {
 /*------------------------STRUCT SECTION ---------------------------*/
 type User struct {
 	//simply hashed
-	Username     string
-	PublicKey    userlib.PKEEncKey
-	Verification userlib.DSVerifyKey
+	Username       string
+	hashedPassword []byte
+	PublicKey      userlib.PKEEncKey
+	Verification   userlib.DSVerifyKey
 
 	//HashKDF Protected
 	PrivateKey   []byte
@@ -241,6 +242,7 @@ func UserSignatureKeys(stringDoubleHashUsername string, hashedPassword []byte) (
 	structSignatureKey = append(tagEncryptedSignatureKey, encryptedSignatureKey...)
 	return verificationKey, structSignatureKey, nil
 }
+func UpdateChanges(hashedUsername string)
 
 // NOTE: The following methods have toy (insecure!) implementations.
 
@@ -304,6 +306,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	var user User
 	//fill struct
 	user.Username = stringHashedUsername
+	user.hashedPassword = hashedPassword
 	user.PublicKey = publicKey
 	user.Verification = verificationKey
 	user.PrivateKey = structRSAPrivateKey
