@@ -242,7 +242,10 @@ func UserSignatureKeys(stringDoubleHashUsername string, hashedPassword []byte) (
 	structSignatureKey = append(tagEncryptedSignatureKey, encryptedSignatureKey...)
 	return verificationKey, structSignatureKey, nil
 }
-func UpdateChanges(hashedUsername string)
+func UpdateChanges(user User) (err error) {
+	//any changes locally reflexted on datastore
+	return nil
+}
 
 // NOTE: The following methods have toy (insecure!) implementations.
 
