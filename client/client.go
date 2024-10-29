@@ -250,6 +250,7 @@ func UpdateChanges(user User) (err error) {
 // NOTE: The following methods have toy (insecure!) implementations.
 
 func InitUser(username string, password string) (userdataptr *User, err error) {
+	/*huge problem on if they change the uuid in datastore it sends them to the mac and encrypted struct */
 	if len(username) == 0 {
 		return nil, errors.New("username cannot be empty") //error statement for empty username
 	}
