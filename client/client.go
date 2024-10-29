@@ -297,6 +297,39 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	user.FileToUsers = make(map[string]uuid.UUID) //might be wrong
 
 	//Put struct into data store
+	byteHardCodedText, err = json.Marshal("Encryption Hard-Code for User Struct")
+	if err != nil {
+		return nil, errors.New("could not convert encryption hard-code to bytes")
+	}
+	keyForEncStruct, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
+	encryptionKeyStruct := keyForEncStruct[0:16]
+	if err != nil {
+		return nil, errors.New("could not create key for struct encryption")
+	}
+	byteHardCodedText, err = json.Marshal("Mac Tag Hard-Code for User Struct")
+	if err != nil {
+		return nil, errors.New("could not convert Mac Tag hard-code to bytes")
+	}
+	keyForMacStruct, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
+	macKeyStruct := keyForMacStruct[0:16]
+	if err != nil {
+		return nil, errors.New("could not create mac key for struct")
+	}
+
+	//hide that user struct!!!!
+	byteUser, err := json.Marshal(user)
+	if err != nil {
+		return nil, errors.New("could not marshal user struct")
+	}
+	structIV := userlib.RandomBytes(16)
+	encryptedStruct := userlib.SymEnc(encryptionKeyStruct, structIV, byteUser)
+	tagEncryptedStruct, err := userlib.HMACEval(macKeyStruct, encryptedStruct)
+	if err != nil {
+		return nil, errors.New("could not create tag for user struct")
+	}
+	structUserValue := append(tagEncryptedStruct, encryptedStruct...)
+
+	userlib.DatastoreSet(createdUUID, structUserValue)
 
 	return &user, nil
 	//return &userdataptr, nil
