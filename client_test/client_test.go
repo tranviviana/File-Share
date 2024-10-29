@@ -595,6 +595,105 @@ var _ = Describe("Client Tests", func() {
 		}
 		/*ADD testing for file adding, and for length of the file name and scaling with the size of a previous append and the number of users the file is shared with */
 
+		Specify("Append shouldn't scale with size of file but by what is added", func() {
+			userlib.DebugMsg("The total bandwidth should only scale with the size of the append and not number of appends either")
+			userlib.DebugMsg("Creating a 10k byte and a 1 byte file")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			bigBandwidth := measureBandwidth(func() {
+				err = alice.StoreFile(aliceFile, userlib.RandomBytes(10000))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("bandwidth of 10000 byte file", bigBandwidth)
+			smallBandwidth := measureBandwidth(func() {
+				err = bob.StoreFile(bobFile, []byte(("A")))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("bandwidth of 1 byte file", smallBandwidth)
+			userlib.DebugMsg("Adding bytes to each file to check bandwidth")
+			//10000 growth
+			err = alice.StoreFile(aliceFile, []byte(emptyString))
+			Expect(err).To(BeNil())
+			var newAdded [10000]int
+			for i := 0; i < 10000; i++ {
+				newAdded[i] = measureBandwidth(func() {
+					err = alice.AppendToFile(aliceFile, []byte("V"))
+					Expect(err).To(BeNil())
+				})
+			}
+			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[9999]))
+
+		})
+		Specify("Append shouldn't scale with the quantity of files", func() {
+			userlib.DebugMsg("Append should not scale with the number of files")
+			userlib.DebugMsg("Initializing user 1")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Scaling up quantity of files")
+			for i:=0; i<1000; i++ {
+				iFile := fmt.Sprintf("%d.txt", i)
+				err = alice.StoreFile(iFile, []byte(emptyString))
+				Expect(err).To(BeNil())
+			}
+			userlib.DebugMsg("Measuring AppendToFile with high quantity of files")
+			bigBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile("0.txt", []byte(emptyString))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Initializing user 2")
+			bob, err = client.InitUser("bob", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Measuring AppendToFile with low quantity of files")
+			err = bob.StoreFile("0.txt", []byte(emptyString))
+			Expect(err).To(BeNil())
+			smallBandwidth := measureBandwidth(func() {
+				err = bob.AppendToFile("0.txt", []byte(emptyString))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference between AppendToFile where quantity of files is different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
+		})
+		Specify("Append shouldn't scale with the length of the file name", func() {
+			userlib.DebugMsg("AppendToFile shouldn't scale with the file name")
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Measuring AppendToFile where file name is small")
+			err = alice.StoreFile(aliceFile, []byte(emptyString))
+			Expect(err).To(BeNil())
+			smallBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Measuring AppendToFile where file name is large")
+			longFileName := strings.Repeat("A", 1000)
+			err = alice.StoreFile(longFileName, []byte(emptyString))
+			Expect(err).To(BeNil())
+			bigBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(longFileName, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference between AppendToFile where file name lengths are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
+		})
+		Specify("AppendToFile shouldn't scale to the size of the previous append", func() {
+			userlib.DebugMsg("Initializing user")
+			alice, err = client.InitUser("alice", defaultPassword)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("appending to a file")
+			err = alice.StoreFile(aliceFile, []byte(empytString))
+			Expect(err).To(BeNil())
+			smallBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("appending to a file with large previous append")
+			err = alice.AppendToFile(aliceFile, userlib.RandomBytes(10000))
+			Expect(err).To(BeNil())
+			bigBandwidth := measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, "A")
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference between AppendToFile where previous append sizes are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
+		})
 		Specify("Append shouldn't scale with the length of the username", func() {
 			userlib.DebugMsg("AppendToFile shouldn't scale with the username")
 			userlib.DebugMsg("Initializing user")
@@ -659,7 +758,7 @@ var _ = Describe("Client Tests", func() {
 				err = alice.AppendToFile(aliceFile, "A")
 				Expect(err).To(BeNil())
 			})
-			userlib.DebugMsg("Sharing file with many users")
+			userlib.DebugMsg("Sharing file with many users & appending")
 			for i:=0; i<1000; i++ {
 				newSharedUser, err := client.InitUser(strconv.Itoa(i), defaultPassword)
 				Expect(err).To(BeNil())
@@ -668,91 +767,11 @@ var _ = Describe("Client Tests", func() {
 				err = newSharedUser.AcceptInvitation("alice", invitationPtr, aliceFile)
 				Expect(err).To(BeNil())
 			}
-			smallBandwidth := measureBandwidth(func() {
+			bigBandwidth := measureBandwidth(func() {
 				err = alice.AppendToFile(aliceFile, "A")
 				Expect(err).To(BeNil())
 			})
 			userlib.DebugMsg("Difference between AppendToFile where shared user quantities are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
-		})
-		Specify("Append shouldn't scale with the length of the file name", func() {
-			userlib.DebugMsg("AppendToFile shouldn't scale with the file name")
-			userlib.DebugMsg("Initializing user")
-			alice, err = client.InitUser("alice", defaultPassword)
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("Measuring AppendToFile where file name is small")
-			err = alice.StoreFile(aliceFile, []byte(emptyString))
-			Expect(err).To(BeNil())
-			smallBandwidth := measureBandwidth(func() {
-				err = alice.AppendToFile(aliceFile, "A")
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Measuring AppendToFile where file name is large")
-			longFileName := strings.Repeat("A", 1000)
-			err = alice.StoreFile(longFileName, []byte(emptyString))
-			Expect(err).To(BeNil())
-			BigBandwidth := measureBandwidth(func() {
-				err = alice.AppendToFile(longFileName, "A")
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Difference between AppendToFile where file name lengths are different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
-		})
-		Specify("Append shouldn't scale with the quantity of files", func() {
-			userlib.DebugMsg("Append should not scale with the number of files")
-			userlib.DebugMsg("Initializing user 1")
-			alice, err = client.InitUser("alice", defaultPassword)
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("Scaling up quantity of files")
-			for i:=0; i<1000; i++ {
-				iFile := fmt.Sprintf("%d.txt", i)
-				err = alice.StoreFile(iFile, []byte(emptyString))
-				Expect(err).To(BeNil())
-			}
-			userlib.DebugMsg("Measuring AppendToFile with high quantity of files")
-			bigBandwidth := measureBandwidth(func() {
-				err = alice.AppendToFile("0.txt", []byte(emptyString))
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Initializing user 2")
-			bob, err = client.InitUser("bob", defaultPassword)
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("Measuring AppendToFile with low quantity of files")
-			err = bob.StoreFile("0.txt", []byte(emptyString))
-			Expect(err).To(BeNil())
-			smallBandwidth := measureBandwidth(func() {
-				err = bob.AppendToFile("0.txt", []byte(emptyString))
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Difference between AppendToFile where quantity of files is different: " + strconv.Itoa(bigBandwidth - smallBandwidth))
-		})
-
-		Specify("Append shouldn't scale with size of file but by what is added", func() {
-			userlib.DebugMsg("The total bandwidth should only scale with the size of the append and not number of appends either")
-			userlib.DebugMsg("Creating a 10k byte and a 1 byte file")
-			alice, err = client.InitUser("alice", defaultPassword)
-			Expect(err).To(BeNil())
-			bigBandwidth := measureBandwidth(func() {
-				err = alice.StoreFile(aliceFile, userlib.RandomBytes(10000))
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("bandwidth of 10000 byte file", bigBandwidth)
-			smallBandwidth := measureBandwidth(func() {
-				err = bob.StoreFile(bobFile, []byte(("A")))
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("bandwidth of 1 byte file", smallBandwidth)
-			userlib.DebugMsg("Adding bytes to each file to check bandwidth")
-			//10000 growth
-			err = alice.StoreFile(aliceFile, []byte(emptyString))
-			Expect(err).To(BeNil())
-			var newAdded [10000]int
-			for i := 0; i < 10000; i++ {
-				newAdded[i] = measureBandwidth(func() {
-					err = alice.AppendToFile(aliceFile, []byte("V"))
-					Expect(err).To(BeNil())
-				})
-			}
-			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[9999]))
-
 		})
 	})
 
