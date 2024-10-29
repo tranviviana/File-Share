@@ -116,8 +116,8 @@ type User struct {
 	Verification userlib.DSVerifyKey
 
 	//HashKDF Protected
-	PrivateKey   userlib.PKEEncKey
-	SignatureKey userlib.DSSignKey
+	PrivateKey   []byte
+	SignatureKey []byte
 	Files        map[string]uuid.UUID
 	FileToUsers  map[string]uuid.UUID //file to tree struct
 }
@@ -284,11 +284,21 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//full encrypted and mac tagged signature key
 	structSignatureKey := append(tagEncryptedSignatureKey, encryptedSignatureKey...)
 	//delete this line... just for error case
-	print(structRSAPrivateKey, structSignatureKey)
+	//print(structRSAPrivateKey, structSignatureKey)
+	//creating new User Struct
+	var user User
+	//fill struct
+	user.Username = stringHashedUsername
+	user.PublicKey = publicKey
+	user.Verification = verificationKey
+	user.PrivateKey = structRSAPrivateKey
+	user.SignatureKey = structSignatureKey
+	user.Files = make(map[string]uuid.UUID)       //might be wrong
+	user.FileToUsers = make(map[string]uuid.UUID) //might be wrong
 
-	var userdata User
-	userdata.Username = username
-	return &userdata, nil
+	//Put struct into data store
+
+	return &user, nil
 	//return &userdataptr, nil
 }
 
