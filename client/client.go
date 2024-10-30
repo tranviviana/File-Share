@@ -182,24 +182,27 @@ func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userli
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("mac key for RSA private key could not be made")
 	}
-	structRSAPrivateKey, err = EncThenMac(encryptionKeyPrivateEncryption, macKeyPrivate, privateKey)
+
+	bytePrivateKey, err := json.Marshal(privateKey)
+	if err != nil {
+		return userlib.PublicKeyType{}, nil, errors.New("could not marshal private key properly")
+	}
+
+	structRSAPrivateKey, err = EncThenMac(encryptionKeyPrivateEncryption, macKeyPrivate, bytePrivateKey)
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("could not concatenate both mac to encryption in RSA PRIVATE KEY ")
 	}
 
 	return publicKey, structRSAPrivateKey, nil
 }
-func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden any) (macEncryptedObject []byte, err error) {
+func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEncryptedObject []byte, err error) {
 	//could return error if the original object are ///////////////////////
+	//pass in the MARSHALED objects get back an encrypted and mac object
 
 	IV := userlib.RandomBytes(16)
 	//MAC(ENC(RSAprivateKey))
 	//convert to byte
-	objectHiddenBytes, err := json.Marshal(objectHidden)
-	if err != nil {
-		return nil, errors.New("could not convert objectHidden into bytes")
-	}
-	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHiddenBytes)
+	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHidden)
 
 	//error userlib.Hash(macKey) need to be 16 bytes
 	tagEncryptedObject, err := userlib.HMACEval(macKey, encryptedObject)
@@ -250,7 +253,11 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 		return userlib.PublicKeyType{}, nil, errors.New("could not create MAC key for signature")
 	}
 
-	structSignatureKey, err = EncThenMac(encryptionKeySignature, macKeySignature, signingKey)
+	byteSigningKey, err := json.Marshal(signingKey)
+	if err != nil {
+		return userlib.PublicKeyType{}, nil, errors.New("coult not marshal signature key before mac and enc")
+	}
+	structSignatureKey, err = EncThenMac(encryptionKeySignature, macKeySignature, byteSigningKey)
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("could not concatenate both mac to encryption in SIGNING")
 	}
@@ -259,7 +266,12 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
 	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
 	//getting orginal struct
-	createdUUID, err := uuid.FromBytes(hashedUsername)
+	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
+	if err != nil {
+		return nil, errors.New("couldn't marshal the hashed username ")
+	}
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
+	createdUUID, err := uuid.FromBytes(uuidUsername)
 	if err != nil {
 		return nil, errors.New("could not reconstruct uuid to update changes")
 	}
@@ -295,11 +307,12 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 		return nil, errors.New("resulting encrypted struct is TOOOO short to be decrypted")
 	}
 	byteUser := userlib.SymDec(encryptionKeyStruct, encryptedStruct)
-	err = json.Unmarshal(byteUser, originalUser)
+	var OGUser User
+	err = json.Unmarshal(byteUser, &OGUser)
 	if err != nil {
 		return nil, errors.New("could not unmarshal original struct in OriginalStruct function")
 	}
-	return originalUser, nil
+	return &OGUser, nil
 }
 
 /*
@@ -355,7 +368,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), byteHashedUsername, 128) //hashKDF off of this
 	hashedPassword, err := json.Marshal(byteHashedPassword)
 	if err != nil {
-		return nil, errors.New("could not marshal usernamen in initUser")
+		return nil, errors.New("could not marshal username in initUser")
 	}
 
 	//check for existing UUID
@@ -363,7 +376,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	if err != nil {
 		return nil, errors.New("couldn't convert user log in into a UUID")
 	}
-	_, ok := userlib.DatastoreGet(uuid.UUID(userlib.Hash(createdUUID[:])))
+	_, ok := userlib.DatastoreGet(createdUUID)
 	if ok {
 		//if value exists
 		return nil, errors.New("username already exists")
@@ -401,12 +414,11 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		return nil, errors.New("mac key for struct cannot be made (init user)")
 	}
 
-	//hide that user struct!!!!
-	//hashedpassword disappears in marshaling
 	byteUser, err := json.Marshal(user)
 	if err != nil {
-		return nil, errors.New("could not marshal user struct")
+		return nil, errors.New("did not marshal byteUser init User")
 	}
+
 	structUserValue, err := EncThenMac(encryptionKeyStruct, macKeyStruct, byteUser)
 	if err != nil {
 		return nil, err
@@ -419,40 +431,49 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 
 func GetUser(username string, password string) (userdataptr *User, err error) {
 	if len(username) == 0 {
-		return nil, errors.New("invalid credentials DUH")
+		return nil, errors.New("username cannot be empty") //error statement for empty username
 	}
+	///convert to byte
 	byteUsername, err := json.Marshal(username)
 	if err != nil {
-		return nil, errors.New("could not convert username to bytes")
-	}
-
-	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
-	if err != nil {
-		return nil, errors.New("couldn't marshal the hashed username ")
+		return nil, errors.New("could not convert username to bytes in getUser")
 	}
 	//convert to byte
 	bytePassword, err := json.Marshal(password)
 	if err != nil {
 		return nil, errors.New("could not convert password to bytes")
 	}
+	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
+	if err != nil {
+		return nil, errors.New("couldn't marshal the hashed username in getUser")
+	}
 	//basis keys
-	hashedUsername := userlib.Hash(byteUsername)
+	byteHashedUsername := userlib.Hash(byteUsername)
+	//marshaling hashedusername to go between the two
+	hashedUsername, err := json.Marshal(byteHashedUsername)
+	if err != nil {
+		return nil, errors.New("could not marshal usernamen in getUser")
+	}
 	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
-	hashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128)
+	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), byteHashedUsername, 128) //hashKDF off of this
+	hashedPassword, err := json.Marshal(byteHashedPassword)
+	if err != nil {
+		return nil, errors.New("could not marshal username in getUser")
+	}
 
 	//check for existing UUID
 	createdUUID, err := uuid.FromBytes(uuidUsername)
 	if err != nil {
-		return nil, errors.New("couldn't convert user log in into a UUID")
+		return nil, errors.New("couldn't convert user log in into a UUID in getUser")
 	}
-
 	_, ok := userlib.DatastoreGet(createdUUID)
 	if !ok {
-		return nil, errors.New("username does not exist in the database")
+		//if value exists
+		return nil, errors.New("username doesn't exist in database")
 	}
 	originalUser, err := OriginalStruct(hashedUsername, hashedPassword)
 	if err != nil {
-		return nil, errors.New("couldn't replenish original user (invalid password/ integrity err)")
+		return nil, err
 	}
 
 	var userdata User
