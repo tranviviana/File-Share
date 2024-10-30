@@ -111,7 +111,7 @@ func someUsefulThings() {
 type User struct {
 	//simply hashed
 	Username       []byte
-	hashedPassword []byte
+	hashedpassword []byte
 	PublicKey      userlib.PKEEncKey
 	Verification   userlib.DSVerifyKey
 
@@ -236,11 +236,9 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 	}
 	return verificationKey, structSignatureKey, nil
 }
-func OriginalStruct(user User) (originalUser *User, err error) {
+func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
 	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
 	//getting orginal struct
-	hashedUsername := user.Username
-	hashedPassword := user.hashedPassword
 	createdUUID, err := uuid.FromBytes(hashedUsername)
 	if err != nil {
 		return nil, errors.New("could not reconstruct uuid to update changes")
@@ -269,7 +267,7 @@ func OriginalStruct(user User) (originalUser *User, err error) {
 
 	//integrity check
 	equal := userlib.HMACEqual(tagEncryptedStruct, testTagEncryptedStruct)
-	if equal == false {
+	if !equal {
 		return nil, errors.New("mac tag of original struct was changed! integrity error in OriginalStruct")
 	}
 
@@ -349,13 +347,11 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		return nil, errors.New("signature key generation error")
 	}
 
-	//delete this line... just for error case
-	//print(structRSAPrivateKey, structSignatureKey)
 	//creating new User Struct
 	var user User
 	//fill struct
 	user.Username = hashedUsername
-	user.hashedPassword = hashedPassword
+	user.hashedpassword = hashedPassword
 	user.PublicKey = publicKey
 	user.Verification = verificationKey
 	user.PrivateKey = structRSAPrivateKey
@@ -374,6 +370,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	}
 
 	//hide that user struct!!!!
+	//hashedpassword disappears in marshaling
 	byteUser, err := json.Marshal(user)
 	if err != nil {
 		return nil, errors.New("could not marshal user struct")
@@ -389,7 +386,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 }
 
 func GetUser(username string, password string) (userdataptr *User, err error) {
-	/*if len(username) == 0 {
+	if len(username) == 0 {
 		return nil, errors.New("invalid credentials DUH")
 	}
 	byteUsername, err := json.Marshal(username)
@@ -409,9 +406,27 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	createdUUID, err := uuid.FromBytes(hashedUsername)
 	if err != nil {
 		return nil, errors.New("couldn't convert user log in into a UUID")
-	}*/
+	}
+
+	_, ok := userlib.DatastoreGet(createdUUID)
+	if ok == false {
+		return nil, errors.New("username does not exist in the database")
+	}
+	originalUser, err := OriginalStruct(hashedUsername, hashedPassword)
+	if err != nil {
+		return nil, errors.New("couldn't replenish original user (invalid password/ integrity err)")
+	}
 
 	var userdata User
+	userdata.Username = hashedUsername
+	userdata.hashedpassword = hashedPassword
+	userdata.PublicKey = originalUser.PublicKey
+	userdata.Verification = originalUser.Verification
+	userdata.PrivateKey = originalUser.PrivateKey
+	userdata.SignatureKey = originalUser.SignatureKey
+	userdata.Files = originalUser.Files             //might be wrong
+	userdata.FileToUsers = originalUser.FileToUsers //might be wrong
+
 	userdataptr = &userdata
 	return userdataptr, nil
 }
