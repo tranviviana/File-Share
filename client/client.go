@@ -242,8 +242,69 @@ func UserSignatureKeys(stringDoubleHashUsername string, hashedPassword []byte) (
 	structSignatureKey = append(tagEncryptedSignatureKey, encryptedSignatureKey...)
 	return verificationKey, structSignatureKey, nil
 }
+func OriginalStruct(user User) (originalUser *User, err error) {
+	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
+	//getting orginal struct
+	hashedUsername := user.Username
+	hashedPassword := user.hashedPassword
+	createdUUID, err := uuid.FromBytes([]byte(hashedUsername))
+	if err != nil {
+		return nil, errors.New("could not reconstruct uuid to update changes")
+	}
+	macEncByteStruct, ok := userlib.DatastoreGet(createdUUID)
+	if !ok {
+		return nil, errors.New("created UUID not in datastore to update changes")
+	}
+	//checking for tampering on original file
+	//slicing current bytes
+	tagEncryptedStruct := macEncByteStruct[:64]
+	encryptedStruct := macEncByteStruct[64:]
+	//regenerating mac tag to check
+	byteHardCodedText, err := json.Marshal("Mac Tag Hard-Code for User Struct")
+	if err != nil {
+		return nil, errors.New("could not convert Mac Tag hard-code to bytes in OriginalStruct")
+	}
+	keyForMacStruct, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
+	if err != nil {
+		return nil, errors.New("could not create tag key for user struct in OriginalStruct")
+	}
+	macKeyStruct := keyForMacStruct[0:16]
+	testTagEncryptedStruct, err := userlib.HMACEval(macKeyStruct, encryptedStruct)
+	if err != nil {
+		return nil, errors.New("could not create tag for user struct in OriginalStruct")
+	}
+
+	//integrity check
+	equal := userlib.HMACEqual(tagEncryptedStruct, testTagEncryptedStruct)
+	if equal == false {
+		return nil, errors.New("mac tag of original struct was changed! integrity error in OriginalStruct")
+	}
+
+	//regenerating key for symmetric key decryption
+	byteHardCodedText, err = json.Marshal("Encryption Hard-Code for User Struct")
+	if err != nil {
+		return nil, errors.New("could not convert encryption hard-code to bytes")
+	}
+	keyForEncStruct, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
+	encryptionKeyStruct := keyForEncStruct[0:16]
+	if err != nil {
+		return nil, errors.New("could not create key for struct encryption")
+	}
+	//checking length before decryption
+	if len(encryptedStruct) < userlib.AESBlockSizeBytes {
+		return nil, errors.New("resulting encrypted struct is TOOOO short to be decrypted")
+	}
+	byteUser := userlib.SymDec(encryptionKeyStruct, encryptedStruct)
+	err = json.Unmarshal(byteUser, originalUser)
+	if err != nil {
+		return nil, errors.New("could not unmarshal original struct in OriginalStruct function")
+	}
+	return originalUser, nil
+}
 func UpdateChanges(user User) (err error) {
 	//any changes locally reflexted on datastore
+
+	//decrypt original struct
 	return nil
 }
 
@@ -357,6 +418,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 }
 
 func GetUser(username string, password string) (userdataptr *User, err error) {
+
 	var userdata User
 	userdataptr = &userdata
 	return userdataptr, nil
