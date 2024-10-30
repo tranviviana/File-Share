@@ -337,6 +337,12 @@ func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []by
 	}
 	return key, nil
 }
+func GetRSAPublicKey(personsUsername string) (RSAKey userlib.PublicKeyType, err error) {
+	return userlib.PublicKeyType{}, nil
+}
+func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicKeyType, err error) {
+	return userlib.PublicKeyType{}, nil
+}
 
 // NOTE: The following methods have toy (insecure!) implementations.
 
