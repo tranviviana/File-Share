@@ -329,7 +329,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	userdata.username = hashedPassword
 	return &userdata, nil
 	//check for existing UUID
-	createdUUID, err := uuid.FromBytes(hashedUsername)
+	/*createdUUID, err := uuid.FromBytes(hashedUsername)
 	if err != nil {
 		return nil, errors.New("couldn't convert user log in into a UUID")
 	}
@@ -384,7 +384,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 
 	userlib.DatastoreSet(createdUUID, structUserValue)
 
-	return &user, nil
+	return &user, nil*/
 }
 
 func GetUser(username string, password string) (userdataptr *User, err error) {
