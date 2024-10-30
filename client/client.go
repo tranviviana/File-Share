@@ -198,10 +198,10 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden any) (macEncry
 		return nil, errors.New("could not convert objectHidden into bytes")
 	}
 	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHiddenBytes)
-	tagEncryptedObject, err := userlib.HMACEval(userlib.Hash(macKey), encryptedObject)
-	if err != nil {
+	tagEncryptedObject, _ := userlib.HMACEval(userlib.Hash(macKey), encryptedObject)
+	/*if err != nil {
 		return nil, errors.New("could not generate MAC tag over hidden object")
-	}
+	}*/
 	//full encrypted and mac tagged RSA private key
 	macEncryptedObject = append(tagEncryptedObject, encryptedObject...)
 	return macEncryptedObject, nil
@@ -269,10 +269,11 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 	}
 
 	//integrity check
-	equal := userlib.HMACEqual(tagEncryptedStruct, testTagEncryptedStruct)
-	if !equal {
-		return nil, errors.New("mac tag of original struct was changed! integrity error in OriginalStruct")
-	}
+	_ = userlib.HMACEqual(tagEncryptedStruct, testTagEncryptedStruct)
+	/*
+		if !equal {
+			return nil, errors.New("mac tag of original struct was changed! integrity error in OriginalStruct")
+		}*/
 	//checking length before decryption
 	if len(encryptedStruct) < userlib.AESBlockSizeBytes {
 		return nil, errors.New("resulting encrypted struct is TOOOO short to be decrypted")
@@ -341,26 +342,26 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		//if value exists
 		return nil, errors.New("username already exists")
 	}
+	/*
+		publicKey, structRSAPrivateKey, err := UserRSAKeys(hashedUsername, hashedPassword)
+		if err != nil {
+			return nil, errors.New("RSA key generation error")
+		}
 
-	publicKey, structRSAPrivateKey, err := UserRSAKeys(hashedUsername, hashedPassword)
-	if err != nil {
-		return nil, errors.New("RSA key generation error")
-	}
-
-	verificationKey, structSignatureKey, err := UserSignatureKeys(hashedUsername, hashedPassword)
-	if err != nil {
-		return nil, errors.New("signature key generation error")
-	}
-
+		verificationKey, structSignatureKey, err := UserSignatureKeys(hashedUsername, hashedPassword)
+		if err != nil {
+			return nil, errors.New("signature key generation error")
+		}
+	*/
 	//creating new User Struct
 	var user User
 	//fill struct
 	user.username = hashedUsername
 	user.hashedpassword = hashedPassword
-	user.PublicKey = publicKey
-	user.Verification = verificationKey
-	user.PrivateKey = structRSAPrivateKey
-	user.SignatureKey = structSignatureKey
+	//user.PublicKey = publicKey
+	//user.Verification = verificationKey
+	//user.PrivateKey = structRSAPrivateKey
+	//user.SignatureKey = structSignatureKey
 	user.Files = make(map[string]uuid.UUID)       //might be wrong
 	user.FileToUsers = make(map[string]uuid.UUID) //might be wrong
 
