@@ -25,7 +25,6 @@ import (
 	// Useful for string manipulation
 
 	// Useful for formatting strings (e.g. `fmt.Sprintf`).
-	"fmt"
 
 	// Useful for creating new error messages to return using errors.New("...")
 	"errors"
@@ -37,7 +36,7 @@ import (
 // This serves two purposes: it shows you a few useful primitives,
 // and suppresses warnings for imports not being used. It can be
 // safely deleted!
-func someUsefulThings() {
+/*func someUsefulThings() {
 
 	// Creates a random UUID.
 	randomUUID := uuid.New()
@@ -102,7 +101,7 @@ func someUsefulThings() {
 
 	// Here's an example of string interpolation!
 	_ = fmt.Sprintf("%s_%d", "file", 1)
-}
+}*/
 
 // This is the type definition for the User struct.
 // A Go struct is like a Python or Java class - it can have attributes
@@ -128,6 +127,8 @@ type User struct {
 // this struct's methods, but you DON'T want that value to be included in the serialized value
 // of this struct that's stored in datastore, then you can use a "private" variable (e.g. one that
 // begins with a lowercase letter).
+
+/*
 type CommunicationsTree struct {
 	UsernameMap []byte //hashKDF and MAC only owner can change
 }
@@ -143,6 +144,7 @@ type CommunicationsChannel struct {
 	FileAddress []userlib.UUID //RSA Encrypted
 
 }
+*/
 
 /*need to flush store and share file revocation situation*/
 
@@ -286,12 +288,15 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 	}
 	return originalUser, nil
 }
-func UpdateChanges(user User) (err error) {
-	//any changes locally reflexted on datastore
 
-	//decrypt original struct
-	return nil
-}
+/*
+	func UpdateChanges(user User) (err error) {
+		//any changes locally reflexted on datastore
+
+		//decrypt original struct
+		return nil
+	}
+*/
 func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []byte) (key []byte, err error) {
 	byteHardCodedText, err := json.Marshal(hardCodedText)
 	if err != nil {
