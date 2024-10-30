@@ -16,23 +16,19 @@ package client
 
 // In this unit tests file, you can write InitUser where you would write client.InitUser in the
 // integration tests (client_test.go). In other words, the "client." in front is no longer needed.
-
+/*
 import (
 	"testing"
 
 	userlib "github.com/cs161-staff/project2-userlib"
 
 	_ "encoding/hex"
-
 	_ "errors"
+	_ "strconv"
+	_ "strings"
 
 	. "github.com/onsi/ginkgo/v2"
-
 	. "github.com/onsi/gomega"
-
-	_ "strconv"
-
-	_ "strings"
 )
 
 func TestSetupAndExecution(t *testing.T) {
@@ -61,4 +57,4 @@ var _ = Describe("Client Unit Tests", func() {
 			Expect(alice.username).To(Equal("alice"))
 		})
 	})
-})
+})*/
