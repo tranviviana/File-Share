@@ -1,5 +1,7 @@
 package client
 
+//Default to the marshaled version of object
+
 // CS 161 Project 2
 
 // Only the following imports are allowed! ANY additional imports
@@ -361,20 +363,20 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	if err != nil {
 		return nil, errors.New("could not convert password to bytes")
 	}
+	//basis keys
+	byteHashedUsername := userlib.Hash(byteUsername)
+	//marshaling hashedusername to go between the two
+	hashedUsername, err := json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
+	if err != nil {
+		return nil, errors.New("could not marshal username in initUser")
+	}
 	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
 	if err != nil {
 		return nil, errors.New("couldn't marshal the hashed username ")
 	}
-	//basis keys
-	byteHashedUsername := userlib.Hash(byteUsername)
-	//marshaling hashedusername to go between the two
-	hashedUsername, err := json.Marshal(byteHashedUsername)
-	if err != nil {
-		return nil, errors.New("could not marshal usernamen in initUser")
-	}
-	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
-	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), byteHashedUsername, 128) //hashKDF off of this
-	hashedPassword, err := json.Marshal(byteHashedPassword)
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)   //for datastore
+	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
+	hashedPassword, err := json.Marshal(byteHashedPassword)                                  //when unmarshaled give you the argon2key of the password (marshaled password and marshaled username)
 	if err != nil {
 		return nil, errors.New("could not marshal username in initUser")
 	}
@@ -463,7 +465,7 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 		return nil, errors.New("could not marshal usernamen in getUser")
 	}
 	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
-	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), byteHashedUsername, 128) //hashKDF off of this
+	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
 	hashedPassword, err := json.Marshal(byteHashedPassword)
 	if err != nil {
 		return nil, errors.New("could not marshal username in getUser")

@@ -372,7 +372,7 @@ var _ = Describe("Client Tests", func() {
 	})
 	/*---------------------------Tests Created Via Example Scenarios --------------------------------*/
 	Describe("Example Scenarios", func() {
-		Specify("User Authentication", func() {
+		Specify("User Authentication after storing file", func() {
 
 			userlib.DebugMsg("Initializing user alice")
 			alice, err = client.InitUser("alice", defaultPassword2)
