@@ -272,11 +272,6 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 	if !equal {
 		return nil, errors.New("mac tag of original struct was changed! integrity error in OriginalStruct")
 	}
-
-	//regenerating key for symmetric key decryption
-	if err != nil {
-		return nil, errors.New("could not create key for struct encryption")
-	}
 	//checking length before decryption
 	if len(encryptedStruct) < userlib.AESBlockSizeBytes {
 		return nil, errors.New("resulting encrypted struct is TOOOO short to be decrypted")
@@ -413,7 +408,7 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	}
 
 	_, ok := userlib.DatastoreGet(createdUUID)
-	if ok == false {
+	if !ok {
 		return nil, errors.New("username does not exist in the database")
 	}
 	originalUser, err := OriginalStruct(hashedUsername, hashedPassword)
