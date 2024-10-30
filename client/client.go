@@ -154,12 +154,12 @@ func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userli
 	//KEY STORE TYPE DEFINITION
 
 	//error marshaling and unmarshaling
-	var stringHashedUsername = "avcfffffffffffffffffffffffffffffffffffffff"
-	/*
-		err = json.Unmarshal(hashedUsername, stringHashedUsername)
-		if err != nil {
-			return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
-		}*/
+	var stringHashedUsername string
+
+	err = json.Unmarshal(hashedUsername, &stringHashedUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
+	}
 
 	publicKey, privateKey, err := userlib.PKEKeyGen()
 	if err != nil {
@@ -202,7 +202,7 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden any) (macEncry
 	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHiddenBytes)
 
 	//error userlib.Hash(macKey) need to be 16 bytes
-	tagEncryptedObject, err := userlib.HMACEval(userlib.Hash(macKey), encryptedObject)
+	tagEncryptedObject, err := userlib.HMACEval(macKey, encryptedObject)
 	if err != nil {
 		return nil, errors.New("could not generate MAC tag over hidden object")
 	}
@@ -212,8 +212,21 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden any) (macEncry
 }
 func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificationKey userlib.DSVerifyKey, structSignatureKey []byte, err error) {
 	//generates signature keys -> puts into key store -> and returns encrypted and maced private key
+	var hashedOnceByteUsername []byte
+
+	err = json.Unmarshal(hashedUsername, &hashedOnceByteUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
+	}
+	hashedTwiceByteUsername := userlib.Hash(hashedOnceByteUsername)
+	doubleHashedUsername, err := json.Marshal(hashedTwiceByteUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, nil, errors.New("could not marshal double hash")
+	}
+
+	//convert to string to put into public key
 	var stringDoubleHashUsername string
-	err = json.Unmarshal(userlib.Hash(hashedUsername), &stringDoubleHashUsername)
+	err = json.Unmarshal(doubleHashedUsername, &stringDoubleHashUsername)
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
 	}
@@ -332,9 +345,19 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		return nil, errors.New("couldn't marshal the hashed username ")
 	}
 	//basis keys
-	hashedUsername := userlib.Hash(byteUsername)
+	byteHashedUsername := userlib.Hash(byteUsername)
+	//marshaling hashedusername to go between the two
+	hashedUsername, err := json.Marshal(byteHashedUsername)
+	if err != nil {
+		return nil, errors.New("could not marshal usernamen in initUser")
+	}
 	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
-	hashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
+	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), byteHashedUsername, 128) //hashKDF off of this
+	hashedPassword, err := json.Marshal(byteHashedPassword)
+	if err != nil {
+		return nil, errors.New("could not marshal usernamen in initUser")
+	}
+
 	//check for existing UUID
 	createdUUID, err := uuid.FromBytes(uuidUsername)
 	if err != nil {
@@ -353,14 +376,14 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 
 	verificationKey, structSignatureKey, err := UserSignatureKeys(hashedUsername, hashedPassword)
 	if err != nil {
-		return nil, errors.New("signature key generation error")
+		return nil, err // errors.New("signature key generation error")
 	}
 
 	//creating new User Struct
 	var user User
 	//fill struct
-	user.username = hashedUsername
-	user.hashedpassword = hashedPassword
+	user.username = hashedUsername       //already marshaled
+	user.hashedpassword = hashedPassword //already marshaled
 	user.PublicKey = publicKey
 	user.Verification = verificationKey
 	user.PrivateKey = structRSAPrivateKey
