@@ -110,7 +110,7 @@ func someUsefulThings() {
 /*------------------------STRUCT SECTION ---------------------------*/
 type User struct {
 	//simply hashed
-	Username       []byte
+	username       []byte
 	hashedpassword []byte
 	PublicKey      userlib.PKEEncKey
 	Verification   userlib.DSVerifyKey
@@ -308,7 +308,7 @@ func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []by
 // NOTE: The following methods have toy (insecure!) implementations.
 
 func InitUser(username string, password string) (userdataptr *User, err error) {
-	/*huge problem on if they change the uuid in datastore it sends them to the mac and encrypted struct */
+
 	if len(username) == 0 {
 		return nil, errors.New("username cannot be empty") //error statement for empty username
 	}
@@ -325,7 +325,9 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//basis keys
 	hashedUsername := userlib.Hash(byteUsername)
 	hashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
-
+	var userdata User
+	userdata.username = hashedPassword
+	return &userdata, nil
 	//check for existing UUID
 	createdUUID, err := uuid.FromBytes(hashedUsername)
 	if err != nil {
@@ -350,7 +352,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//creating new User Struct
 	var user User
 	//fill struct
-	user.Username = hashedUsername
+	user.username = hashedUsername
 	user.hashedpassword = hashedPassword
 	user.PublicKey = publicKey
 	user.Verification = verificationKey
@@ -418,7 +420,7 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	}
 
 	var userdata User
-	userdata.Username = hashedUsername
+	userdata.username = hashedUsername
 	userdata.hashedpassword = hashedPassword
 	userdata.PublicKey = originalUser.PublicKey
 	userdata.Verification = originalUser.Verification
