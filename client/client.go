@@ -23,7 +23,6 @@ import (
 	// hex.EncodeToString(...) is useful for converting []byte to string
 
 	// Useful for string manipulation
-	"strings"
 
 	// Useful for formatting strings (e.g. `fmt.Sprintf`).
 
@@ -33,74 +32,6 @@ import (
 	// Optional.
 	_ "strconv"
 )
-
-type User struct {
-	Username string
-
-	// You can add other attributes here if you want! But note that in order for attributes to
-	// be included when this struct is serialized to/from JSON, they must be capitalized.
-	// On the flipside, if you have an attribute that you want to be able to access from
-	// this struct's methods, but you DON'T want that value to be included in the serialized value
-	// of this struct that's stored in datastore, then you can use a "private" variable (e.g. one that
-	// begins with a lowercase letter).
-}
-
-// NOTE: The following methods have toy (insecure!) implementations.
-
-func InitUser(username string, password string) (userdataptr *User, err error) {
-	var userdata User
-	userdata.Username = username
-	return &userdata, nil
-}
-
-func GetUser(username string, password string) (userdataptr *User, err error) {
-	var userdata User
-	userdataptr = &userdata
-	return userdataptr, nil
-}
-
-func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.Username))[:16])
-	if err != nil {
-		return err
-	}
-	contentBytes, err := json.Marshal(content)
-	if err != nil {
-		return err
-	}
-	userlib.DatastoreSet(storageKey, contentBytes)
-	return
-}
-
-func (userdata *User) AppendToFile(filename string, content []byte) error {
-	return nil
-}
-
-func (userdata *User) LoadFile(filename string) (content []byte, err error) {
-	storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.Username))[:16])
-	if err != nil {
-		return nil, err
-	}
-	dataJSON, ok := userlib.DatastoreGet(storageKey)
-	if !ok {
-		return nil, errors.New(strings.ToTitle("file not found"))
-	}
-	err = json.Unmarshal(dataJSON, &content)
-	return content, err
-}
-
-func (userdata *User) CreateInvitation(filename string, recipientUsername string) (
-	invitationPtr uuid.UUID, err error) {
-	return
-}
-
-func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid.UUID, filename string) error {
-	return nil
-}
-
-func (userdata *User) RevokeAccess(filename string, recipientUsername string) error {
-	return nil
-}
 
 // This serves two purposes: it shows you a few useful primitives,
 // and suppresses warnings for imports not being used. It can be
@@ -176,7 +107,6 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 // A Go struct is like a Python or Java class - it can have attributes
 // (e.g. like the Username attribute) and methods (e.g. like the StoreFile method below).
 /*------------------------STRUCT SECTION ---------------------------*/
-/*
 type User struct {
 	//simply hashed
 	username       []byte
@@ -190,7 +120,6 @@ type User struct {
 	Files        map[string]uuid.UUID
 	FileToUsers  map[string]uuid.UUID //file to tree struct
 }
-*/
 
 // You can add other attributes here if you want! But note that in order for attributes to
 // be included when this struct is serialized to/from JSON, they must be capitalized.
@@ -220,8 +149,6 @@ type CommunicationsChannel struct {
 /*need to flush store and share file revocation situation*/
 
 /*---------------------------Helper Functions-------------------------*/
-
-/*
 func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userlib.PKEEncKey, structRSAPrivateKey []byte, err error) {
 	//generates RSA keys -> puts into key store -> and returns encrypted and maced private key
 	//KEY STORE TYPE DEFINITION
@@ -357,7 +284,7 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 	}
 	return originalUser, nil
 }
-*/
+
 /*
 	func UpdateChanges(user User) (err error) {
 		//any changes locally reflexted on datastore
@@ -366,8 +293,6 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 		return nil
 	}
 */
-
-/*
 func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []byte) (key []byte, err error) {
 	byteHardCodedText, err := json.Marshal(hardCodedText)
 	if err != nil {
@@ -417,15 +342,15 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		return nil, errors.New("username already exists")
 	}
 
-		publicKey, structRSAPrivateKey, err := UserRSAKeys(hashedUsername, hashedPassword)
-		if err != nil {
-			return nil, errors.New("RSA key generation error")
-		}
+	publicKey, structRSAPrivateKey, err := UserRSAKeys(hashedUsername, hashedPassword)
+	if err != nil {
+		return nil, errors.New("RSA key generation error")
+	}
 
-		verificationKey, structSignatureKey, err := UserSignatureKeys(hashedUsername, hashedPassword)
-		if err != nil {
-			return nil, errors.New("signature key generation error")
-		}
+	verificationKey, structSignatureKey, err := UserSignatureKeys(hashedUsername, hashedPassword)
+	if err != nil {
+		return nil, errors.New("signature key generation error")
+	}
 
 	//creating new User Struct
 	var user User
@@ -526,7 +451,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	userlib.DatastoreSet(storageKey, contentBytes)
+	userlib.DatastoreSet(storageKey, contentBytes) */
 	return nil
 }
 
@@ -543,7 +468,7 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 	if !ok {
 		return nil, errors.New(strings.ToTitle("file not found"))
 	}
-	err = json.Unmarshal(dataJSON, &content)
+	err = json.Unmarshal(dataJSON, &content) */
 	return nil, nil
 	//return content, err
 }
@@ -560,4 +485,3 @@ func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid
 func (userdata *User) RevokeAccess(filename string, recipientUsername string) error {
 	return nil
 }
-*/
