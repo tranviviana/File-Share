@@ -340,7 +340,33 @@ func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []by
 	return key, nil
 }
 func GetRSAPublicKey(personsUsername string) (RSAKey userlib.PublicKeyType, err error) {
-	return userlib.PublicKeyType{}, nil
+	//given a personsUsername (share or initialize) gets the users RSA public Key
+	if len(personsUsername) == 0 {
+		return userlib.PublicKeyType{}, errors.New("username cannot be empty") //error statement for empty username
+	}
+
+	byteUsername, err := json.Marshal(personsUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, errors.New("could not marshal string username in GetRSAPublicKey")
+	}
+	byteHashedUsername := userlib.Hash(byteUsername)
+	hashedPersonsUsername, err := json.Marshal(byteHashedUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, errors.New("could not marshal hashed recipient username in GetRSAPublicKey")
+	}
+
+	var stringHashedUsername string
+
+	err = json.Unmarshal(hashedPersonsUsername, &stringHashedUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, errors.New("could not unmarshal the recipients username to a string version")
+	}
+	personsPublicKey, ok := userlib.KeystoreGet(stringHashedUsername)
+	if !ok {
+		return userlib.PublicKeyType{}, errors.New("recipient does not exist")
+	}
+
+	return personsPublicKey, nil
 }
 func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicKeyType, err error) {
 	return userlib.PublicKeyType{}, nil
