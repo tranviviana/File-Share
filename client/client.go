@@ -153,6 +153,7 @@ func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userli
 	//generates RSA keys -> puts into key store -> and returns encrypted and maced private key
 	//KEY STORE TYPE DEFINITION
 	var stringHashedUsername string
+
 	err = json.Unmarshal(hashedUsername, &stringHashedUsername)
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
@@ -297,7 +298,7 @@ func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []by
 	if err != nil {
 		return nil, errors.New(errorMessage + "specifically marshalling")
 	}
-	wholeKey, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
+	wholeKey, err := userlib.HashKDF(hashedPassword[:16], byteHardCodedText)
 	key = wholeKey[0:16]
 	if err != nil {
 		return nil, errors.New(errorMessage)
@@ -322,20 +323,16 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	if err != nil {
 		return nil, errors.New("could not convert password to bytes")
 	}
-
-	//basis keys
-	hashedUsername := userlib.Hash(byteUsername)
 	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
 	if err != nil {
 		return nil, errors.New("couldn't marshal the hashed username ")
 	}
-	hashedUsernameUUID, err := userlib.HashKDF(hashedUsername, byteHardCodedText)
-	if err != nil {
-		return nil, errors.New("hashedUsernameUUID didn't work")
-	}
+	//basis keys
+	hashedUsername := userlib.Hash(byteUsername)
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
 	hashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
 	//check for existing UUID
-	createdUUID, err := uuid.FromBytes(hashedUsernameUUID[:16])
+	createdUUID, err := uuid.FromBytes(uuidUsername)
 	if err != nil {
 		return nil, errors.New("couldn't convert user log in into a UUID")
 	}
@@ -401,6 +398,11 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	if err != nil {
 		return nil, errors.New("could not convert username to bytes")
 	}
+
+	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
+	if err != nil {
+		return nil, errors.New("couldn't marshal the hashed username ")
+	}
 	//convert to byte
 	bytePassword, err := json.Marshal(password)
 	if err != nil {
@@ -408,19 +410,11 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	}
 	//basis keys
 	hashedUsername := userlib.Hash(byteUsername)
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
 	hashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128)
 
-	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
-	if err != nil {
-		return nil, errors.New("couldn't marshal the hashed username ")
-	}
-	hashedUsernameUUID, err := userlib.HashKDF(hashedUsername, byteHardCodedText)
-	if err != nil {
-		return nil, errors.New("hashedUsernameUUID didn't work")
-	}
-
 	//check for existing UUID
-	createdUUID, err := uuid.FromBytes(hashedUsernameUUID)
+	createdUUID, err := uuid.FromBytes(uuidUsername)
 	if err != nil {
 		return nil, errors.New("couldn't convert user log in into a UUID")
 	}
