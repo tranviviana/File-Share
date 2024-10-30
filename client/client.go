@@ -152,8 +152,8 @@ type CommunicationsChannel struct {
 func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userlib.PKEEncKey, structRSAPrivateKey []byte, err error) {
 	//generates RSA keys -> puts into key store -> and returns encrypted and maced private key
 	//KEY STORE TYPE DEFINITION
+	//input marshaled hashedUsername and hashed Password, output public and private key
 
-	//error marshaling and unmarshaling
 	var stringHashedUsername string
 
 	err = json.Unmarshal(hashedUsername, &stringHashedUsername)
@@ -215,6 +215,8 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEn
 }
 func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificationKey userlib.DSVerifyKey, structSignatureKey []byte, err error) {
 	//generates signature keys -> puts into key store -> and returns encrypted and maced private key
+
+	//since keystore takes in unique hashes, this section up to ** is double hashing the original stuff to put into key store
 	var hashedOnceByteUsername []byte
 
 	err = json.Unmarshal(hashedUsername, &hashedOnceByteUsername)
@@ -226,7 +228,7 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("could not marshal double hash")
 	}
-
+	//*
 	//convert to string to put into public key
 	var stringDoubleHashUsername string
 	err = json.Unmarshal(doubleHashedUsername, &stringDoubleHashUsername)
@@ -236,7 +238,7 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 
 	signingKey, verificationKey, err := userlib.DSKeyGen()
 	if err != nil {
-		return userlib.PublicKeyType{}, nil, errors.New("could no generate signature Keys")
+		return userlib.PublicKeyType{}, nil, errors.New("could not generate signature Keys")
 	}
 	err = userlib.KeystoreSet(stringDoubleHashUsername, verificationKey)
 	if err != nil {
