@@ -225,6 +225,7 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 	if err != nil {
 		return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
 	}
+	//hashing the unmarshaled byte first
 	hashedTwiceByteUsername := userlib.Hash(hashedOnceByteUsername)
 	doubleHashedUsername, err := json.Marshal(hashedTwiceByteUsername)
 	if err != nil {
@@ -369,7 +370,39 @@ func GetRSAPublicKey(personsUsername string) (RSAKey userlib.PublicKeyType, err 
 	return personsPublicKey, nil
 }
 func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicKeyType, err error) {
-	return userlib.PublicKeyType{}, nil
+	//like getRSA key but has the double hashing for verification!
+	if len(personsUsername) == 0 {
+		return userlib.PublicKeyType{}, errors.New("persons username cannot be empty") //error statement for empty username
+	}
+	///convert to byte
+	byteUsername, err := json.Marshal(personsUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, errors.New("could not convert persons username to bytes")
+	}
+	hashedOnceByteUsername := userlib.Hash(byteUsername)
+
+	hashedTwiceByteUsername := userlib.Hash(hashedOnceByteUsername) //can do direct because signature generation unmarshals
+	doubleHashedUsername, err := json.Marshal(hashedTwiceByteUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, errors.New("could not marshal the second hashing of the byte version(not marshaled version of username)")
+	}
+	//*
+	//convert to string to put into public key
+	var stringDoubleHashUsername string
+	err = json.Unmarshal(doubleHashedUsername, &stringDoubleHashUsername)
+	if err != nil {
+		return userlib.PublicKeyType{}, errors.New("could not convert double hashed username to string")
+	}
+	verificationKey, ok := userlib.KeystoreGet(stringDoubleHashUsername)
+	if !ok {
+		return userlib.PublicKeyType{}, errors.New("recipient does not exist")
+	}
+	return verificationKey, nil
+
+}
+func getuserUUID(user User) (err error) {
+	//fill in
+	return nil
 }
 
 // NOTE: The following methods have toy (insecure!) implementations.
