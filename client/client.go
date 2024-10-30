@@ -152,12 +152,14 @@ type CommunicationsChannel struct {
 func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userlib.PKEEncKey, structRSAPrivateKey []byte, err error) {
 	//generates RSA keys -> puts into key store -> and returns encrypted and maced private key
 	//KEY STORE TYPE DEFINITION
-	var stringHashedUsername string
 
-	err = json.Unmarshal(hashedUsername, &stringHashedUsername)
-	if err != nil {
-		return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
-	}
+	//error marshaling and unmarshaling
+	var stringHashedUsername = "avcfffffffffffffffffffffffffffffffffffffff"
+	/*
+		err = json.Unmarshal(hashedUsername, stringHashedUsername)
+		if err != nil {
+			return userlib.PublicKeyType{}, nil, errors.New("could not unmarshal hashed username")
+		}*/
 
 	publicKey, privateKey, err := userlib.PKEKeyGen()
 	if err != nil {
@@ -198,6 +200,8 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden any) (macEncry
 		return nil, errors.New("could not convert objectHidden into bytes")
 	}
 	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHiddenBytes)
+
+	//error userlib.Hash(macKey) need to be 16 bytes
 	tagEncryptedObject, err := userlib.HMACEval(userlib.Hash(macKey), encryptedObject)
 	if err != nil {
 		return nil, errors.New("could not generate MAC tag over hidden object")
@@ -344,7 +348,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 
 	publicKey, structRSAPrivateKey, err := UserRSAKeys(hashedUsername, hashedPassword)
 	if err != nil {
-		return nil, errors.New("RSA key generation error")
+		return nil, err
 	}
 
 	verificationKey, structSignatureKey, err := UserSignatureKeys(hashedUsername, hashedPassword)
@@ -382,7 +386,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	}
 	structUserValue, err := EncThenMac(encryptionKeyStruct, macKeyStruct, byteUser)
 	if err != nil {
-		return nil, errors.New("could not concatenate encryption to mac key init user")
+		return nil, err
 	}
 
 	userlib.DatastoreSet(createdUUID, structUserValue)
