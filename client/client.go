@@ -299,9 +299,31 @@ func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicK
 	return verificationKey, nil
 
 }
-func getuserUUID(user User) (err error) {
-	//fill in
-	return nil
+func getuserUUID(username string) (UUID userlib.UUID, err error) {
+	if len(username) == 0 {
+		return userlib.UUID{}, errors.New("username cannot be empty") //error statement for empty username
+	}
+	///convert to byte
+	byteUsername, err := json.Marshal(username)
+	if err != nil {
+		return userlib.UUID{}, errors.New("could not convert username to bytes")
+	}
+	byteHashedUsername := userlib.Hash(byteUsername)
+	hashedUsername, err := json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
+	if err != nil {
+		return userlib.UUID{}, errors.New("could not marshal username in initUser")
+	}
+	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
+	if err != nil {
+		return userlib.UUID{}, errors.New("couldn't marshal the hashed username ")
+	}
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
+	createdUUID, err := uuid.FromBytes(uuidUsername)
+	if err != nil {
+		return userlib.UUID{}, errors.New("couldn't convert user log in into a UUID")
+	}
+
+	return createdUUID, nil
 }
 
 // NOTE: The following methods have toy (insecure!) implementations.
