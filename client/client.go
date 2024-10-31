@@ -471,13 +471,26 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 
 func containsFile(filename string, userdata *User) (result bool, err error) {
 	//returns whether a filename exists in a person's namespace
-	protectedFile, err := encryptFileName(userdata, filename)
+	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ownedFiles := userdata.Files
 	sharedFiles := userdata.SharedFiles
-	//iterate through both maps for their keys and then see if any are equivalen to the UUID of the protectedFile
+	protectedFilenameStr := string(protectedFilename)
+
+    // Check if the protected filename exists in owned files
+    if _, exists := userdata.Files[protectedFilenameStr]; exists {
+        return true, nil
+    }
+
+    // Check if the protected filename exists in shared files
+    if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
+        return true, nil
+    }
+
+    // If not found in both, return false
+    return false, nil
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
