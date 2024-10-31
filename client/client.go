@@ -355,7 +355,7 @@ func encryptFileName(userdataptr *User, filename string) (fileKey []byte, protec
 	}
 	return fileKey, protectedFilename, nil
 }
-func sharingFileAddress(userdataptr *User, key [byte], recipientName string) (err error){
+func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fileName string) (err error){
 	/*take the key and then RSA encrypt it with the recipients public key, sign it with your private key*/
 	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
 	if err != nil {
@@ -365,18 +365,46 @@ func sharingFileAddress(userdataptr *User, key [byte], recipientName string) (er
 	if !ok {
 		return errors.New("recipient does not exist")
 	}
-	encryptedKey, err := userlib.PKEEnc(recipient.PublicKey, key)
+	
+	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
 	if err != nil {
-		return errors.New("failed to encrypt")
+		return false, err
 	}
-	signature, err := userlib.DSSignKey(userdataptr.PrivateKey, encryptedKey)
+	sharedFiles := userdata.SharedFiles
+	protectedFilenameStr := string(protectedFilename)
+	hasSharedFile = false;
+    if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
+        hasSharedFile = true;
+    }
+	if !hasSharedFile {
+		return errors.New("shared file does not exist")
+	}
+	/*
+	3) the recipients name append sign with your private key 
+	4) Mac and encrypt with the key passed in Hashkdf with hardcoded bytes
+	5) put total encryption into shared files (2)
+	*/
+	commChannelUUID = userdata.SharedFiles[protectedFilenameStr]
+	signature, err := DSSign(userdataptr.SignatureKey, []byte(recipientName)) //signature or private key?
+    if err != nil {
+        return err
+    }
+	hashed, err = HashKDF(key?, byte[]("sharing file"))
+	encSignature, err = EncThenMac(hashed, signature)
 	if err != nil {
-		return errors.New("failed to sign")
-	}
-	//share across ?
+        return err
+    }
 	return nil
 } 
-func containsFile(filename string, userdata *User) (result bool, err error) {
+func becomeAParent (luserdataptr *User, recipientName string, sharingKey string) (err error){
+	/*this will be used in create invititation
+	1) check that recipient exists
+	2) encrypt and mac the recipients name
+	3) sign it
+	4) add it to the communications channel shared with list
+	*/
+}
+func containsFile(userdata *User, filename string) (result bool, err error) {
 	//returns whether a filename exists in a person's namespace
 	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
 	if err != nil {
