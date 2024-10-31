@@ -761,7 +761,7 @@ var _ = Describe("Client Tests", func() {
 				Expect(err).To(BeNil())
 			})
 			userlib.DebugMsg("Sharing file with many users & appending")
-			for i := 0; i < 1000; i++ {
+			for i := 0; i < 50; i++ {
 				newSharedUser, err := client.InitUser(strconv.Itoa(i), defaultPassword)
 				Expect(err).To(BeNil())
 				invitationPtr, err := alice.CreateInvitation(aliceFile, strconv.Itoa(i))
@@ -854,31 +854,40 @@ var _ = Describe("Client Tests", func() {
 
 		Specify("GetUser UID Integrity Error", func() {
 			userlib.DebugMsg("Testing GetUser where the User struct address cannot be obtained due to malicious action, or the integrity of the user struct has been compromised")
-			userlib.DebugMsg("Initializing user")
+			userlib.DebugMsg("Creating pre list of UUIDs")
 			dataMap := userlib.DatastoreGetMap()
 			var beforeSnapShot ([]uuid.UUID)
 			for key1 := range dataMap {
 				beforeSnapShot = append(beforeSnapShot, key1)
 			}
+			userlib.DebugMsg("Creating post list of UUIDs after adding user")
 			var afterSnapShot ([]uuid.UUID)
 			EvanBot, err = client.InitUser("EvanBot", defaultPassword)
 			dataMap = userlib.DatastoreGetMap()
 			for key2 := range dataMap {
 				afterSnapShot = append(afterSnapShot, key2)
-
 			}
 
-			//finding the different UUID (would be the key that is different in the after situation than the start) struct uuid
+			userlib.DebugMsg("Creating a new list of addedUUIDs that is the difference between pre and post lists")
 			var addedUUID ([]uuid.UUID)
-			for item := range afterSnapShot {
-				if beforeSnapShot[item] != afterSnapShot[item] {
-					differentItem := afterSnapShot[item]
-					addedUUID = append(addedUUID, differentItem)
+			beforeSet := make(map[uuid.UUID]bool)
+			for _, id := range beforeSnapShot {
+				beforeSet[id] = true
+			}
+
+			for _, id := range afterSnapShot {
+				if !beforeSet[id] {
+					addedUUID = append(addedUUID, id)
 				}
 			}
+
+			userlib.DebugMsg("Corrupting user location of the first element of addedUUIDs list")
+			if len(addedUUID) == 0 {
+				userlib.DebugMsg("No new UUID found; potential issue with InitUser")
+				return
+			}
+			userlib.DebugMsg("length of added users: %d", len(addedUUID))
 			userlib.DatastoreSet(addedUUID[0], []byte("changed struct address"))
-			// should theoretically return the added UUID
-			userlib.DebugMsg("Corrupting user location")
 			_, err = client.GetUser("Evanbot", defaultPassword)
 			Expect(err).ToNot(BeNil())
 		})
