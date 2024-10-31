@@ -232,7 +232,7 @@ func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []by
 	if err != nil {
 		return nil, errors.New(errorMessage + "specifically marshalling")
 	}
-	wholeKey, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
+	wholeKey, err := userlib.HashKDF(hashedPassword[:16], byteHardCodedText)
 	key = wholeKey[0:16]
 	if err != nil {
 		return nil, errors.New(errorMessage)
@@ -325,6 +325,8 @@ func getuserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err
 
 	return hashedUsername, createdUUID, nil
 }
+
+// NOTE: The following methods have toy (insecure!) implementations.
 func encryptFileName(userdataptr *User, filename string) (protectedFilename []byte, err error) {
 	hashedUsername := userdataptr.username
 	hashedPassword := userdataptr.hashedpassword
@@ -350,25 +352,28 @@ func encryptFileName(userdataptr *User, filename string) (protectedFilename []by
 	return protectedFilename, nil
 
 }
-
-// NOTE: The following methods have toy (insecure!) implementations.
-
 func InitUser(username string, password string) (userdataptr *User, err error) {
-	hashedUsername, createdUUID, err := getuserUUID(username)
-	if err != nil {
-		return nil, errors.New("could not get hashed username and uuid from the username given")
-	}
 	//convert to byte
 	bytePassword, err := json.Marshal(password)
 	if err != nil {
 		return nil, errors.New("could not convert password to bytes")
 	}
-	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 16) //hashKDF off of this
-	hashedPassword, err := json.Marshal(byteHashedPassword)                                 //when unmarshaled give you the argon2key of the password (marshaled password and marshaled username)
+	//basis keys
+	hashedUsername, createdUUID, err := getuserUUID(username)
+	if err != nil {
+		return nil, err
+	}
+	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
+	hashedPassword, err := json.Marshal(byteHashedPassword)                                  //when unmarshaled give you the argon2key of the password (marshaled password and marshaled username)
 	if err != nil {
 		return nil, errors.New("could not marshal username in initUser")
 	}
 
+	//check for existing UUID
+
+	if err != nil {
+		return nil, errors.New("couldn't convert user log in into a UUID")
+	}
 	_, ok := userlib.DatastoreGet(createdUUID)
 	if ok {
 		//if value exists
@@ -484,11 +489,6 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	protectedFilename, err := encryptFileName(userdata, filename)
-	if err != nil {
-		return err
-	}
-	print(protectedFilename)
 	//storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.Username))[:16])
 	/*if err != nil {
 		return err
