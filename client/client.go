@@ -29,7 +29,7 @@ type User struct {
 	SignatureKey []byte
 	Files        map[string]uuid.UUID
 	FileToUsers  map[string]uuid.UUID //file to Communicationstree struct this and ^ should have same filenames ultimately
-	SharedFile   map[string]uuid.UUID //filename to uuid of communications channel (when they are revoked they wont see any thing they can use in the comms channel --> can't access)
+	SharedFiles  map[string]uuid.UUID //filename to uuid of communications channel (when they are revoked they wont see any thing they can use in the comms channel --> can't access)
 }
 
 type CommunicationsTree struct {
@@ -401,7 +401,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	user.SignatureKey = structSignatureKey
 	user.Files = make(map[string]uuid.UUID)       //might be wrong
 	user.FileToUsers = make(map[string]uuid.UUID) //might be wrong
-	user.SharedFile = make(map[string]uuid.UUID)
+	user.SharedFiles = make(map[string]uuid.UUID)
 
 	//Put struct into data store
 	encryptionKeyStruct, err := ConstructKey("Encryption Hard-Code for User Struct", "could not create key for struct encryption", hashedPassword)
@@ -463,19 +463,28 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	userdata.SignatureKey = originalUser.SignatureKey
 	userdata.Files = originalUser.Files             //might be wrong
 	userdata.FileToUsers = originalUser.FileToUsers //might be wrong
+	userdata.SharedFiles = originalUser.SharedFiles
 
 	userdataptr = &userdata
 	return userdataptr, nil
 }
 
-func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	//	randomUUID := uuid.New()
-	// randombyte
-	/*fileKey, protectedFile, err := encryptFileName(userdata, filename)
+func containsFile(filename string, userdata *User) (result bool, err error) {
+	//returns whether a filename exists in a person's namespace
+	protectedFile, err := encryptFileName(userdata, filename)
 	if err != nil {
 		return err
 	}
-	contentKey, err := ConstructKey("")*/
+	ownedFiles := userdata.Files
+	sharedFiles := userdata.SharedFiles
+	//iterate through both maps for their keys and then see if any are equivalen to the UUID of the protectedFile
+}
+
+func (userdata *User) StoreFile(filename string, content []byte) (err error) {
+	//	randomUUID := uuid.New()
+	// randombyte
+
+	//check if filename already exists
 
 	//storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.Username))[:16])
 	/*if err != nil {
