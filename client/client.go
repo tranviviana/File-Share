@@ -354,15 +354,15 @@ func encryptFileName(userdataptr *User, filename string) (protectedFilename []by
 }
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
+	hashedUsername, createdUUID, err := getuserUUID(username)
+	if err != nil {
+		return nil, err
+	}
 	bytePassword, err := json.Marshal(password)
 	if err != nil {
 		return nil, errors.New("could not convert password to bytes")
 	}
 	//basis keys
-	hashedUsername, createdUUID, err := getuserUUID(username)
-	if err != nil {
-		return nil, err
-	}
 	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
 	hashedPassword, err := json.Marshal(byteHashedPassword)                                  //when unmarshaled give you the argon2key of the password (marshaled password and marshaled username)
 	if err != nil {
