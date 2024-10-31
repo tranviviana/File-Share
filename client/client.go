@@ -33,7 +33,7 @@ type User struct {
 
 type CommunicationsTree struct {
 	//only owner has access to this
-	UsernameMap map[string][]byte //hashKDF and MAC only owner can change
+	UsernameMap map[string][]byte //hashKDF and MAC only owner can change with the encryption keys username -> encryption keys
 }
 type File struct {
 	CommChannel        userlib.UUID
@@ -45,7 +45,7 @@ type FileContent struct {
 }
 type CommunicationsChannel struct {
 	FileAddress []userlib.UUID //RSA Encrypted with user symmetric key in it when a user shares, they share with same symmetric key so you can revoke thorugh finding all those keys and removing
-
+	SharedWith  []userlib.UUID // each person that accepts cna edit this tree?
 }
 
 /*need to flush store and share file revocation situation*/
