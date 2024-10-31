@@ -232,7 +232,7 @@ func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []by
 	if err != nil {
 		return nil, errors.New(errorMessage + "specifically marshalling")
 	}
-	wholeKey, err := userlib.HashKDF(hashedPassword[:16], byteHardCodedText)
+	wholeKey, err := userlib.HashKDF(hashedPassword, byteHardCodedText)
 	key = wholeKey[0:16]
 	if err != nil {
 		return nil, errors.New(errorMessage)
@@ -299,73 +299,76 @@ func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicK
 	return verificationKey, nil
 
 }
-func getuserUUID(username string) (UUID userlib.UUID, err error) {
+func getuserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err error) {
 	if len(username) == 0 {
-		return userlib.UUID{}, errors.New("username cannot be empty") //error statement for empty username
+		return nil, userlib.UUID{}, errors.New("username cannot be empty") //error statement for empty username
 	}
 	///convert to byte
 	byteUsername, err := json.Marshal(username)
 	if err != nil {
-		return userlib.UUID{}, errors.New("could not convert username to bytes")
+		return nil, userlib.UUID{}, errors.New("could not convert username to bytes")
 	}
 	byteHashedUsername := userlib.Hash(byteUsername)
-	hashedUsername, err := json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
+	hashedUsername, err = json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
 	if err != nil {
-		return userlib.UUID{}, errors.New("could not marshal username in initUser")
+		return nil, userlib.UUID{}, errors.New("could not marshal username in initUser")
 	}
 	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
 	if err != nil {
-		return userlib.UUID{}, errors.New("couldn't marshal the hashed username ")
+		return nil, userlib.UUID{}, errors.New("couldn't marshal the hashed username ")
 	}
 	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
 	createdUUID, err := uuid.FromBytes(uuidUsername)
 	if err != nil {
-		return userlib.UUID{}, errors.New("couldn't convert user log in into a UUID")
+		return nil, userlib.UUID{}, errors.New("couldn't convert user log in into a UUID")
 	}
 
-	return createdUUID, nil
+	return hashedUsername, createdUUID, nil
+}
+func encryptFileName(userdataptr *User, filename string) (protectedFilename []byte, err error) {
+	hashedUsername := userdataptr.username
+	hashedPassword := userdataptr.hashedpassword
+
+	byteFilename, err := json.Marshal(filename)
+	if err != nil {
+		return nil, errors.New("could not retrieve hashed username from struct in encrypting the file name")
+	}
+	uniqueUsernameAndFile := append(hashedUsername, byteFilename...)
+	fileKey := userlib.Argon2Key(hashedPassword, uniqueUsernameAndFile, 16) //hashkdf off of this
+	encryptionKeyFilename, err := ConstructKey("encryption key for the filenames", "could not create encryption for the file name", fileKey)
+	if err != nil {
+		return nil, err
+	}
+	macKeyFilename, err := ConstructKey("mac key for the filenames", "could not create mac key for the filename", fileKey)
+	if err != nil {
+		return nil, err
+	}
+	protectedFilename, err = EncThenMac(encryptionKeyFilename, macKeyFilename, byteFilename)
+	if err != nil {
+		return nil, err
+	}
+	return protectedFilename, nil
+
 }
 
 // NOTE: The following methods have toy (insecure!) implementations.
 
 func InitUser(username string, password string) (userdataptr *User, err error) {
-
-	if len(username) == 0 {
-		return nil, errors.New("username cannot be empty") //error statement for empty username
-	}
-	///convert to byte
-	byteUsername, err := json.Marshal(username)
+	hashedUsername, createdUUID, err := getuserUUID(username)
 	if err != nil {
-		return nil, errors.New("could not convert username to bytes")
+		return nil, errors.New("could not get hashed username and uuid from the username given")
 	}
 	//convert to byte
 	bytePassword, err := json.Marshal(password)
 	if err != nil {
 		return nil, errors.New("could not convert password to bytes")
 	}
-	//basis keys
-	byteHashedUsername := userlib.Hash(byteUsername)
-	//marshaling hashedusername to go between the two
-	hashedUsername, err := json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
-	if err != nil {
-		return nil, errors.New("could not marshal username in initUser")
-	}
-	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
-	if err != nil {
-		return nil, errors.New("couldn't marshal the hashed username ")
-	}
-	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)   //for datastore
-	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 128) //hashKDF off of this
-	hashedPassword, err := json.Marshal(byteHashedPassword)                                  //when unmarshaled give you the argon2key of the password (marshaled password and marshaled username)
+	byteHashedPassword := userlib.Argon2Key(userlib.Hash(bytePassword), hashedUsername, 16) //hashKDF off of this
+	hashedPassword, err := json.Marshal(byteHashedPassword)                                 //when unmarshaled give you the argon2key of the password (marshaled password and marshaled username)
 	if err != nil {
 		return nil, errors.New("could not marshal username in initUser")
 	}
 
-	//check for existing UUID
-	createdUUID, err := uuid.FromBytes(uuidUsername)
-	if err != nil {
-		return nil, errors.New("couldn't convert user log in into a UUID")
-	}
 	_, ok := userlib.DatastoreGet(createdUUID)
 	if ok {
 		//if value exists
@@ -481,6 +484,11 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
+	protectedFilename, err := encryptFileName(userdata, filename)
+	if err != nil {
+		return err
+	}
+	print(protectedFilename)
 	//storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.Username))[:16])
 	/*if err != nil {
 		return err
