@@ -354,7 +354,50 @@ func encryptFileName(userdataptr *User, filename string) (fileKey []byte, protec
 		return nil, nil, err
 	}
 	return fileKey, protectedFilename, nil
+}
+func sharingFileAddress(userdataptr *User, key [byte], recipientName string) (err error){
+	/*take the key and then RSA encrypt it with the recipients public key, sign it with your private key*/
+	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
+	if err != nil {
+		return err
+	}
+	recipient, ok = userlib.DatastoreGet(recipientUUID)
+	if !ok {
+		return errors.New("recipient does not exist")
+	}
+	encryptedKey, err := userlib.PKEEnc(recipient.PublicKey, key)
+	if err != nil {
+		return errors.New("failed to encrypt")
+	}
+	signature, err := userlib.DSSignKey(userdataptr.PrivateKey, encryptedKey)
+	if err != nil {
+		return errors.New("failed to sign")
+	}
+	//share across ?
+	return nil
+} 
+func containsFile(filename string, userdata *User) (result bool, err error) {
+	//returns whether a filename exists in a person's namespace
+	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
+	if err != nil {
+		return false, err
+	}
+	ownedFiles := userdata.Files
+	sharedFiles := userdata.SharedFiles
+	protectedFilenameStr := string(protectedFilename)
 
+    // Check if the protected filename exists in owned files
+    if _, exists := userdata.Files[protectedFilenameStr]; exists {
+        return true, nil
+    }
+
+    // Check if the protected filename exists in shared files
+    if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
+        return true, nil
+    }
+
+    // If not found in both, return false
+    return false, nil
 }
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
@@ -467,30 +510,6 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 
 	userdataptr = &userdata
 	return userdataptr, nil
-}
-
-func containsFile(filename string, userdata *User) (result bool, err error) {
-	//returns whether a filename exists in a person's namespace
-	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
-	if err != nil {
-		return false, err
-	}
-	ownedFiles := userdata.Files
-	sharedFiles := userdata.SharedFiles
-	protectedFilenameStr := string(protectedFilename)
-
-    // Check if the protected filename exists in owned files
-    if _, exists := userdata.Files[protectedFilenameStr]; exists {
-        return true, nil
-    }
-
-    // Check if the protected filename exists in shared files
-    if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
-        return true, nil
-    }
-
-    // If not found in both, return false
-    return false, nil
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
