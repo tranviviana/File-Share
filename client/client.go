@@ -28,12 +28,14 @@ type User struct {
 	PrivateKey   []byte
 	SignatureKey []byte
 	Files        map[string]uuid.UUID
-	FileToUsers  map[string]uuid.UUID //file to tree struct
+	FileToUsers  map[string]uuid.UUID //file to Communicationstree struct this and ^ should have same filenames ultimately
+	SharedFile   map[string]uuid.UUID //filename to uuid of communications channel (when they are revoked they wont see any thing they can use in the comms channel --> can't access)
 }
 
 type CommunicationsTree struct {
 	//only owner has access to this
-	UsernameMap map[string][]byte //hashKDF and MAC only owner can change with the encryption keys username -> encryption keys
+	CurrentKey      []byte //file key hidden again because of argon2key of user specifically
+	AccessibleUsers []byte
 }
 type File struct {
 	CommChannel        userlib.UUID
@@ -45,7 +47,7 @@ type FileContent struct {
 }
 type CommunicationsChannel struct {
 	FileAddress []userlib.UUID //RSA Encrypted with user symmetric key in it when a user shares, they share with same symmetric key so you can revoke thorugh finding all those keys and removing
-	SharedWith  []userlib.UUID // each person that accepts cna edit this tree?
+	SharedWith  []userlib.UUID // each person that accepts can edit this tree?
 }
 
 /*need to flush store and share file revocation situation*/
@@ -399,6 +401,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	user.SignatureKey = structSignatureKey
 	user.Files = make(map[string]uuid.UUID)       //might be wrong
 	user.FileToUsers = make(map[string]uuid.UUID) //might be wrong
+	user.SharedFile = make(map[string]uuid.UUID)
 
 	//Put struct into data store
 	encryptionKeyStruct, err := ConstructKey("Encryption Hard-Code for User Struct", "could not create key for struct encryption", hashedPassword)
@@ -464,11 +467,10 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	userdataptr = &userdata
 	return userdataptr, nil
 }
-func generateUUID() {
-
-}
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
+	//	randomUUID := uuid.New()
+	// randombyte
 	/*fileKey, protectedFile, err := encryptFileName(userdata, filename)
 	if err != nil {
 		return err
