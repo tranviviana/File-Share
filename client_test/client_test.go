@@ -1040,4 +1040,19 @@ var _ = Describe("Client Tests", func() {
 		})
 		//error for malicious action in revokeaccess
 	})
+	/*----------EDGE CASES------------*/
+	/* CHECK EDGE CASE ON ED STEM
+	Describe("Edge Cases", func() {
+		FSpecify("InitUser really long username and password", func() {
+			userlib.DebugMsg("Testing InitUser where there is no existing username")
+			userlib.DebugMsg("Initializing user with a new username")
+			Username := strings.Repeat("C", 20000000000)
+			Password := strings.Repeat("a", 10000)
+			EvanBot, err = client.InitUser(Username, Password)
+			Expect(err).To(BeNil())
+			userlib.DebugMsg("Gettomg user with an existing long username and existing long password")
+			CodaBot, err = client.GetUser(Username, Password)
+			Expect(err).To(BeNil())
+		})
+	})*/
 })
