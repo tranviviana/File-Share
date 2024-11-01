@@ -190,6 +190,20 @@ func GetFileStruct(userdata *User, filename string) (ownerFile bool, structUUID 
 
 		return false, uuid.UUID{}, errors.New("file does not exist in filespace")
 }
+func RetrieveInvitation(invitationUUID uuid.UUID) (invitation Invitation, err error) {
+	invitationBytes, err := userlib.DatastoreGet(invitationUUID)
+	if err != nil {
+		return Invitation{}, errors.New("could not retrieve invitation from datastore")
+	}
+
+	err = json.Unmarshal(invitationBytes, &invitation)
+	if err != nil {
+		return Invitation{}, errors.New("could not unmarshal invitation data")
+	}
+
+	return invitation, nil
+}
+
 
 func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
 	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
