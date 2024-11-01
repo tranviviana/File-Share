@@ -397,12 +397,30 @@ func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicK
 }
 
 /*------------------------------ Private Data -------------------------*/
-/*
-func GetSignatureKey(userdataptr *User) (signatureKey userlib.PrivateKeyType, err error) {
 
+func GetSignatureKey(hashedPassword []byte, byteSigningKey []byte) (signatureKey userlib.PrivateKeyType, err error) {
+	decryptionKeySignature, err := ConstructKey("RSA Digital Signature Encryption Key", "could not HASHKDF key for Signature encryption", hashedPassword)
+	if err != nil {
+		return userlib.PrivateKeyType{}, err
+	}
+	macKeySignature, err := ConstructKey("RSA Digital Signature Mac Key", "could not HASHKDF mac for Signature Tag", hashedPassword)
+	if err != nil {
+		return userlib.PrivateKeyType{}, err
+	}
+	decryptedSignatureKey, err := CheckAndDecrypt(byteSigningKey, macKeySignature, decryptionKeySignature)
+	if err != nil {
+		return userlib.PrivateKeyType{}, err
+	}
+	var signingKeyPointer userlib.PKEDecKey
+	err = json.Unmarshal(decryptedSignatureKey, &signingKeyPointer)
+	if err != nil {
+		return userlib.PrivateKeyType{}, errors.New("could not unmarshal the private key")
+	}
+	signatureKey = signingKeyPointer
+	return signatureKey, nil
 }
 
-func GetPrivateKey(hashedPassword []byte) (privateKey userlib.PrivateKeyType, err error) {
+func GetPrivateKey(hashedPassword []byte, bytePrivateKey []byte) (privateKey userlib.PrivateKeyType, err error) {
 	decryptionKeyPrivateEncryption, err := ConstructKey("RSA Private Key Encryption Key", "could not create key for RSA key encryption", hashedPassword)
 	if err != nil {
 		return userlib.PrivateKeyType{}, err
@@ -411,12 +429,23 @@ func GetPrivateKey(hashedPassword []byte) (privateKey userlib.PrivateKeyType, er
 	if err != nil {
 		return userlib.PrivateKeyType{}, err
 	}
-	return userlib.PrivateKeyType{}, nil
+	decryptedPrivateKey, err := CheckAndDecrypt(bytePrivateKey, macKeyPrivate, decryptionKeyPrivateEncryption)
+	if err != nil {
+		return userlib.PrivateKeyType{}, err
+	}
+	var privateKeyPointer userlib.PKEDecKey
+	err = json.Unmarshal(decryptedPrivateKey, &privateKeyPointer)
+	if err != nil {
+		return userlib.PrivateKeyType{}, errors.New("could not unmarshal the private key")
+	}
+	privateKey = privateKeyPointer
+	return privateKey, nil
 
 }
-*/
+
 /*----------------------------------- File Sharing Helpers ------------------------*/
-/*func SharingFileAddress(signatureKey userlib.PrivateKeyType, key []byte, recipientName string, fileName string) (err error) {
+/*
+func SharingFileAddress(signatureKey userlib.PrivateKeyType, key []byte, recipientName string, fileName string) (err error) {
 	//check recipient exists
 	_, recipientUUID, err := GetUserUUID(recipientName)
 	if err != nil {
@@ -443,7 +472,8 @@ func GetPrivateKey(hashedPassword []byte) (privateKey userlib.PrivateKeyType, er
 	print(protectedRecipientName)
 	//signingKey := userdataptr.SignatureKey
 	return nil
-}
+}*/
+/*
 func BecomeAParent(userdataptr *User, recipientName string, sharingKey string) (err error) {
 	/*this will be used in create invititation
 	1) check that recipient exists
@@ -475,8 +505,8 @@ func BecomeAParent(userdataptr *User, recipientName string, sharingKey string) (
 		return err
 	}
 
-}
-*/
+} */
+
 /* --------------------------------------------TO DO FUNCTIONS ---------------------------------------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
@@ -546,7 +576,6 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	}
 
 	userlib.DatastoreSet(createdUUID, structUserValue)
-
 	return &user, nil
 }
 
