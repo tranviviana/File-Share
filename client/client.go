@@ -690,6 +690,9 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 }
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	fileExists, fileUUID, err := GetFileUUID(userdata, filename)
+	if err != nil {
+		return err
+	}
 	var file File
 	if fileExists {
 		fileData, ok := userlib.DatastoreGet(fileUUID)
