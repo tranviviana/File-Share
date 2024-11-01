@@ -383,14 +383,12 @@ func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fil
         return err
     }
 
-    commTree := CommunicationsTree{
-        CurrentKey: encryptedSignature,
-        AccessibleUsers: []byte(recipientName), 
+    commChannel := CommunicationsChannel{
+        FileAddress: []userlib.UUID{commChannelUUID}, // Store the file address
+        SharedWith:  []userlib.UUID{recipientUUID},    // Add the recipient to the shared list
     }
 
-    userlib.DatastoreSet(commChannelUUID, commTree)
-
-    return nil
+    userlib.DatastoreSet(commChannelUUID, commChannel)
 } 
 func becomeAParent (userdataptr *User, recipientName string, sharingKey string) (err error){
 	/*this will be used in create invititation
