@@ -84,6 +84,17 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEn
 	macEncryptedObject = append(tagEncryptedObject, encryptedObject...)
 	return macEncryptedObject, nil
 }
+func CheckAndDecrypt(protectedObject []byte, macKey []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
+	ok, err := CheckMac(protectedObject, macKey)
+	if !ok {
+		return nil, err
+	}
+	decryptedObject, err = Decrypt(protectedObject, decryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	return decryptedObject, nil
+}
 func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 	macTag := protectedObject[:64]
 	encryptedObject := protectedObject[64:]
@@ -92,6 +103,9 @@ func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 		return false, errors.New("could not reconstruct the mac tag in checking the mac")
 	}
 	ok = userlib.HMACEqual(macTag, possiblyCorruptedTag)
+	if !ok {
+		return false, errors.New("INTEGRITY ERROR")
+	}
 	return ok, nil
 
 }
@@ -130,24 +144,27 @@ func GetUserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err
 
 	return hashedUsername, createdUUID, nil
 }
-func ContainsFile(userdata *User, filename string) (contains bool, err error) {
-	//***need to complete***/
-	//returns whether a filename exists in a person's namespace
-	fileKey, protectedFilename, err := EncryptFileName(userdata, filename)
-	if err != nil {
-		return false, err
-	}
-	protectedFilenameStr := string(protectedFilename)
 
-	if _, exists := userdata.Files[protectedFilenameStr]; exists {
-		return true, nil
-	}
-	if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
-		return true, nil
-	}
+/*
+	func ContainsFile(userdata *User, filename string) (contains bool, err error) {
+		//***need to complete
+		//returns whether a filename exists in a person's namespace
+		fileKey, protectedFilename, err := EncryptFileName(userdata, filename)
+		if err != nil {
+			return false, err
+		}
+		protectedFilenameStr := string(protectedFilename)
 
-	return false, nil
-}
+		if _, exists := userdata.Files[protectedFilenameStr]; exists {
+			return true, nil
+		}
+		if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
+			return true, nil
+		}
+
+		return false, nil
+	}
+*/
 func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
 	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
 	//getting orginal struct
@@ -173,14 +190,7 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 	if err != nil {
 		return nil, errors.New("mac key for struct cannot be made (init user)")
 	}
-	ok, err = CheckMac(macEncByteStruct, macKeyStruct)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, errors.New("INTEGRITY ERROR TAGS DONT MATCH")
-	}
-	byteUser, err := Decrypt(macEncByteStruct, encryptionKeyStruct)
+	byteUser, err := CheckAndDecrypt(macEncByteStruct, macKeyStruct, encryptionKeyStruct)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +397,7 @@ func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicK
 }
 
 /*------------------------------ Private Data -------------------------*/
+/*
 func GetSignatureKey(userdataptr *User) (signatureKey userlib.PrivateKeyType, err error) {
 
 }
@@ -403,9 +414,9 @@ func GetPrivateKey(hashedPassword []byte) (privateKey userlib.PrivateKeyType, er
 	return userlib.PrivateKeyType{}, nil
 
 }
-
+*/
 /*----------------------------------- File Sharing Helpers ------------------------*/
-func SharingFileAddress(signatureKey userlib.PrivateKeyType, key []byte, recipientName string, fileName string) (err error) {
+/*func SharingFileAddress(signatureKey userlib.PrivateKeyType, key []byte, recipientName string, fileName string) (err error) {
 	//check recipient exists
 	_, recipientUUID, err := GetUserUUID(recipientName)
 	if err != nil {
@@ -439,7 +450,7 @@ func BecomeAParent(userdataptr *User, recipientName string, sharingKey string) (
 	2) encrypt and mac the recipients name
 	3) sign it
 	4) add it to the communications channel shared with list
-	*/
+
 	//check recipient exists
 
 	_, recipientUUID, err := GetUserUUID(recipientName)
@@ -465,7 +476,7 @@ func BecomeAParent(userdataptr *User, recipientName string, sharingKey string) (
 	}
 
 }
-
+*/
 /* --------------------------------------------TO DO FUNCTIONS ---------------------------------------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
