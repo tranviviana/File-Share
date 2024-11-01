@@ -372,31 +372,34 @@ func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fil
 	}
 	sharedFiles := userdata.SharedFiles
 	protectedFilenameStr := string(protectedFilename)
-	hasSharedFile = false;
-    if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
-        hasSharedFile = true;
+	commChannelUUID, exists := userdataptr.SharedFiles[protectedFilenameStr]
+    if !exists {
+        return errors.New("shared file does not exist")
     }
-	if !hasSharedFile {
-		return errors.New("shared file does not exist")
-	}
 	/*
 	3) the recipients name append sign with your private key 
 	4) Mac and encrypt with the key passed in Hashkdf with hardcoded bytes
 	5) put total encryption into shared files (2)
 	*/
-	commChannelUUID = userdata.SharedFiles[protectedFilenameStr]
-	signature, err := DSSign(userdataptr.SignatureKey, []byte(recipientName)) //signature or private key?
+	macKey := userlib.Argon2Key(key[:], []byte("macKey"), 16) // Generate MAC key
+    encryptedSignature, err := EncThenMac(macKey, signature)
     if err != nil {
         return err
     }
-	hashed, err = HashKDF(key?, byte[]("sharing file"))
-	encSignature, err = EncThenMac(hashed, signature)
-	if err != nil {
-        return err
+
+    // Step 5: Store the total encryption into shared files
+    // Retrieve the CommunicationsTree
+    commTree := CommunicationsTree{
+        CurrentKey:      encryptedSignature,
+        AccessibleUsers: []byte(recipientName), // Modify as per your access control logic
     }
-	return nil
+
+    // Store the CommunicationsTree in the Datastore
+    userlib.DatastoreSet(commChannelUUID, commTree)
+
+    return nil
 } 
-func becomeAParent (luserdataptr *User, recipientName string, sharingKey string) (err error){
+func becomeAParent (userdataptr *User, recipientName string, sharingKey string) (err error){
 	/*this will be used in create invititation
 	1) check that recipient exists
 	2) encrypt and mac the recipients name
