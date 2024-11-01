@@ -5,6 +5,7 @@ package client
 // CS 161 Project 2
 
 import (
+	"encoding/hex"
 	"encoding/json"
 
 	userlib "github.com/cs161-staff/project2-userlib"
@@ -28,26 +29,42 @@ type User struct {
 	PrivateKey   []byte
 	SignatureKey []byte
 	Files        map[string]uuid.UUID
-	FileToUsers  map[string]uuid.UUID //file to Communicationstree struct this and ^ should have same filenames ultimately
-	SharedFiles  map[string]uuid.UUID //filename to uuid of communications channel (when they are revoked they wont see any thing they can use in the comms channel --> can't access)
+	FileToUsers  map[string]uuid.UUID //file to Communications Tree struct this and ^ should have same filenames ultimately
+	SharedFiles  map[string]uuid.UUID //to uuid of communications channel (when they are revoked they wont see any thing they can use in the comms channel --> can't access)
 }
 
 type CommunicationsTree struct {
 	//only owner has access to this
+	CommsChan userlib.UUID
 	CurrentKey      []byte //file key hidden again because of argon2key of user specifically
 	AccessibleUsers []byte
 }
 type File struct {
-	CommChannel        userlib.UUID
 	FileContentPointer userlib.UUID //randomized and then do counter to hashKDF and get fileContentStruct
 	FileLength         uint
 }
 type FileContent struct {
 	BlockEncrypted string
 }
+//in invitation send invitation struct (rsa encrypted and signed with personalized symmetric key)
+//store the symm key in shared files
+//look for name in file address check for sign of owner of sharer
+//get file address and keys
+//now decrypt
+
+//when revoked still have invitation pointer but wont be able to decrypt file adress or content 
+//datastore adversary could change invitation but the recipient would know bc they stored key
+//if they changed adress it would throw a revoked or integrity error
+type Invitation struct {
+	DoubleHashedOwner string //use to get verification key
+	HashedOwner string //in keystore RSA public key. shared with is encrypted with owner's public key
+	DoubleHashedSharer string
+	HashedSharer string
+	communicationChannel uuid.UUID
+}
 type CommunicationsChannel struct {
-	FileAddress []userlib.UUID //RSA Encrypted with user symmetric key in it when a user shares, they share with same symmetric key so you can revoke thorugh finding all those keys and removing
-	SharedWith  []userlib.UUID // each person that accepts can edit this tree?
+	FileAddress map[string][]byte //RSA Encrypted with user symmetric key in it when a user shares, they share with same symmetric key so you can revoke thorugh finding all those keys and removing
+	SharedWith  []userlib.UUID // each person that accepts can edit this tree? rsa enc w owners public key & w inviter's signature. 
 }
 
 /*need to flush store and share file revocation situation*/
@@ -144,27 +161,36 @@ func GetUserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err
 
 	return hashedUsername, createdUUID, nil
 }
+/*1. check if filename in namespace
+		a. return whether in shared or owned files (FUNC)
+		b. if in file. store as normal
+		c. if in shared file (FUNC) in invitiation struct, in comms uuid, in file address  --> look for recipient name & symmetric key & go n file struct --> decrypt --> compare file lengths to change
+*/
 
-/*
-	func ContainsFile(userdata *User, filename string) (contains bool, err error) {
-		//***need to complete
+func GetFileStruct(userdata *User, filename string) (ownerFile bool, structUUID uuid.UUID, err error) {
+		//***need to complete go down to the function,
 		//returns whether a filename exists in a person's namespace
-		fileKey, protectedFilename, err := EncryptFileName(userdata, filename)
+		protectedFilename, err:= EncryptFileName(userdata.username, userdata.hashedpassword, filename)
 		if err != nil {
-			return false, err
+			return false, uuid.UUID{}, err
 		}
 		protectedFilenameStr := string(protectedFilename)
 
-		if _, exists := userdata.Files[protectedFilenameStr]; exists {
-			return true, nil
+		if fileUUID, exists := userdata.Files[protectedFilenameStr]; exists {
+			return true, fileUUID, nil
 		}
-		if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
-			return true, nil
+		if invitationUUID, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
+			fileAddresses = 
+			if _, exists := fileAddresses[userdata.username]; exists {
+				fileStruct := fileAddresses[userdata.username] 
+				fileUUID = Decrypt(fileStruct, invitation.HashedOwner)
+				return false, fileUUID, nil
+			}
 		}
 
-		return false, nil
-	}
-*/
+		return false, uuid.UUID{}, errors.New("file does not exist in filespace")
+}
+
 func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
 	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
 	//getting orginal struct
@@ -201,29 +227,37 @@ func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser 
 	}
 	return &OGUser, nil
 }
-func EncryptFileName(hashedUsername []byte, hashedPassword []byte, filename string) (fileKey []byte, protectedFilename []byte, err error) {
+func EncryptFileName(hashedUsername []byte, hashedPassword []byte, filename string) (protectedFilename []byte, err error) {
 	byteFilename, err := json.Marshal(filename)
 	if err != nil {
-		return nil, nil, errors.New("could not retrieve hashed username from struct in encrypting the file name")
+		return nil, errors.New("could not retrieve hashed username from struct in encrypting the file name")
 	}
 	uniqueUsernameAndFile := append(hashedUsername, byteFilename...)
-	fileKey = userlib.Argon2Key(hashedPassword, uniqueUsernameAndFile, 16)                                                                   //hashkdf off of this
+	fileKey := userlib.Argon2Key(hashedPassword, uniqueUsernameAndFile, 16)                                                                   //hashkdf off of this
 	encryptionKeyFilename, err := ConstructKey("encryption key for the filenames", "could not create encryption for the file name", fileKey) //might need to change
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	macKeyFilename, err := ConstructKey("mac key for the filenames", "could not create mac key for the filename", fileKey) //might need to change
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	protectedFilename, err = EncThenMac(encryptionKeyFilename, macKeyFilename, byteFilename)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return fileKey, protectedFilename, nil
+	return protectedFilename, nil
 
 }
-
+func randomKeyGenerator()(randomKey []byte, err error){
+	salt := userlib.RandomBytes(128)
+	generatedPassword := userlib.RandomBytes(128)
+	randomKey, err = ConstructKey(hex.EncodeToString(salt), "Could not create a shared Encryption Key", generatedPassword)
+	if err != nil {
+		return nil, err
+	}
+	return randomKey, err
+}
 /*
 	func UpdateChanges(user User) (err error) {
 		//any changes locally reflexted on datastore
@@ -621,6 +655,50 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
+	protectedFile, err := EncryptFileName(userdata.username, userdata.hashedpassword, filename)
+	if err != nil {
+		return err
+	}
+	hashedPassword := userdata.hashedpassword
+	/*allFiles := userdata.Files
+	sharedFiles := userdata.SharedFiles */
+	//check if file exists in the space or not
+	
+	//create a helper that returns if the file exists in all files or in shared files, if exists return the UUID of the file -- if it already exists, doesnt storefile error?
+	// if new storefile < previous storefile, delete excess
+	//might have to create a helper that decryptes the communications channel to get the UUID of the File struct
+
+	//THIS IS FOR ONLY IF THE FILE IS NEW
+	var fileCommsChannelStruct CommunicationsChannel 
+	var fileStruct File
+	var contentStruct FileContent
+	var sharingTreeStruct CommunicationsTree
+
+	//generating a random key
+
+	fileKeys, err := randomKeyGenerator(has)
+	if err != nil {
+		return err
+	}
+	encryptionCTCK, err := ConstructKey("communications tree current key encryption key", "could not construct a key to encrypt the key in the struct", hashedPassword)
+	if err != nil {
+		return err
+	}
+	macCTCK, err := ConstructKey("communications tree current key mac key", "could not construct a key to mac", hashedPassword)
+	if err != nil {
+		return err
+	}
+	protectedsharedFileEKey, err := EncThenMac(encryptionCTCK, macCTCK, fileKeys)
+	if err != nil {
+		return err
+	}
+	sharingTreeStruct.CurrentKey = protectedsharedFileEKey
+	sharingTreeStruct.AccessibleUsers = make(byte[], 0)
+	
+	communicationsTreeUUID := uuid.New()
+	sharingTreeStruct.CommsChan = 	communicationsTreeUUID
+
+	
 	//	randomUUID := uuid.New()
 	// randombyte
 
@@ -640,6 +718,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 
 func (userdata *User) AppendToFile(filename string, content []byte) error {
 	return nil
+	//filecontent + length
 }
 
 func (userdata *User) LoadFile(filename string) (content []byte, err error) {
@@ -667,4 +746,11 @@ func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid
 
 func (userdata *User) RevokeAccess(filename string, recipientUsername string) error {
 	return nil
+	/*move file struct to location. gen new keys
+	change accessible users
+	update file addresses for accessing people
+	delete
+
+	front as random place. next places +1
+	*/
 }
