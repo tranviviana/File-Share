@@ -55,7 +55,7 @@ type Invitation struct {
 	HashedOwner          string //in keystore RSA public key. shared with is encrypted with owner's public key
 	DoubleHashedSharer   string
 	HashedSharer         string
-	communicationChannel uuid.UUID
+	communicationChannel userlib.UUID
 }
 type CommunicationsChannel struct {
 	FileAddress map[string][]byte //RSA Encrypted with user symmetric key in it when a user shares, they share with same symmetric key so you can revoke thorugh finding all those keys and removing
@@ -157,15 +157,7 @@ func GetUserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err
 	return hashedUsername, createdUUID, nil
 }
 
-/*1. check if filename in namespace
-a. return whether in shared or owned files (FUNC)
-b. if in file. store as normal
-c. if in shared file (FUNC) in invitiation struct, in comms uuid, in file address  --> look for recipient name & symmetric key & go n file struct --> decrypt --> compare file lengths to change
-*/
-
-func GetFileStruct(userdata *User, filename string) (ownerFile bool, structUUID uuid.UUID, err error) {
-	//***need to complete go down to the function,
-	//returns whether a filename exists in a person's namespace
+func GetFileUUID(userdata *User, filename string) (fileExists bool, structUUID uuid.UUID, err error) {
 	protectedFilename, err := EncryptFileName(userdata.username, userdata.hashedpassword, filename)
 	if err != nil {
 		return false, uuid.UUID{}, err
@@ -180,25 +172,36 @@ func GetFileStruct(userdata *User, filename string) (ownerFile bool, structUUID 
 		if err != nil {
 			return false, uuid.UUID{}, err
 		}
-		commChannel, err := GetCommunicationsChannel(invitation.communicationChannel)
+		commChannel, err := GetCommunicationChannel(invitation.communicationChannel)
 		if err != nil {
 			return false, uuid.UUID{}, err
 		}
 		if encryptedFileStruct, exists := commChannel.FileAddress[string(userdata.username)]; exists {
-			fileUUID, err := SymmDec(encryptedFileStruct, invitation.HashedOwner) //decryption?
+			var privateKey userlib.PKEDecKey
+			err := json.Unmarshal(userdata.PrivateKey, &privateKey)
 			if err != nil {
-				return false, uuid.UUID{}, err
+				return false, userlib.UUID{}, errors.New("unable to convert private key for decryption")
 			}
-			return false, fileUUID, nil
+
+			fileUUIDBytes, err := userlib.PKEDec(privateKey, encryptedFileStruct)
+			if err != nil {
+				return false, userlib.UUID{}, errors.New("failed to decrypt file address: access may have been revoked")
+			}
+			fileUUID, err := uuid.FromBytes(fileUUIDBytes)
+			if err != nil {
+				return false, userlib.UUID{}, errors.New("invalid UUID format after decryption")
+			}
+
+			return true, fileUUID, nil
 		}
 	}
 
 	return false, uuid.UUID{}, errors.New("file does not exist in filespace")
 }
 func GetInvitation(invitationUUID uuid.UUID) (invitation Invitation, err error) {
-	invitationBytes, err := userlib.DatastoreGet(invitationUUID)
-	if err != nil {
-		return Invitation{}, errors.New("could not retrieve invitation from datastore")
+	invitationBytes, ok := userlib.DatastoreGet(invitationUUID)
+	if !ok {
+		return Invitation{}, errors.New("invitation does not exist in datastore")
 	}
 
 	err = json.Unmarshal(invitationBytes, &invitation)
@@ -207,6 +210,19 @@ func GetInvitation(invitationUUID uuid.UUID) (invitation Invitation, err error) 
 	}
 
 	return invitation, nil
+}
+func GetCommunicationChannel(communicationChannelUUID uuid.UUID) (communicationChannel CommunicationsChannel, err error) {
+	commChannelBytes, ok := userlib.DatastoreGet(communicationChannelUUID)
+	if !ok {
+		return CommunicationsChannel{}, errors.New("communication channel does not exist in datastore")
+	}
+
+	err = json.Unmarshal(commChannelBytes, &communicationChannel)
+	if err != nil {
+		return CommunicationsChannel{}, errors.New("could not unmarshal invitation data")
+	}
+
+	return communicationChannel, nil
 }
 
 func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
@@ -679,15 +695,17 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		return err
 	}
 	hashedPassword := userdata.hashedpassword
-	/*allFiles := userdata.Files
-	sharedFiles := userdata.SharedFiles */
-	//check if file exists in the space or not
+	fileExists, fileUUID, err := GetFileUUID(userdata, filename)
+	if fileExists {
 
-	//create a helper that returns if the file exists in all files or in shared files, if exists return the UUID of the file -- if it already exists, doesnt storefile error?
-	// if new storefile < previous storefile, delete excess
-	//might have to create a helper that decryptes the communications channel to get the UUID of the File struct
+	}
+	//count from uuid to hashkdf to get filecontent struct
+	//modify file struct enrypted content
+	//if file length > content length: delete existing content
+	//file content = hashkdf content
+	//file length = encrypted content.length
 
-	//THIS IS FOR ONLY IF THE FILE IS NEW
+	/*THIS IS FOR ONLY IF THE FILE IS NEW
 	var fileCommsChannelStruct CommunicationsChannel
 	var fileStruct File
 	var contentStruct FileContent
@@ -695,7 +713,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 
 	//generating a random key
 
-	fileKeys, err := randomKeyGenerator(has)
+	fileKeys, err := randomKeyGenerator()
 	if err != nil {
 		return err
 	}
@@ -717,13 +735,8 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	communicationsTreeUUID := uuid.New()
 	sharingTreeStruct.CommsChan = communicationsTreeUUID
 
-	//	randomUUID := uuid.New()
-	// randombyte
-
-	//check if filename already exists
-
 	//storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.Username))[:16])
-	/*if err != nil {
+	if err != nil {
 		return err
 	}
 	contentBytes, err := json.Marshal(content)
