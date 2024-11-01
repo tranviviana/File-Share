@@ -52,7 +52,177 @@ type CommunicationsChannel struct {
 
 /*need to flush store and share file revocation situation*/
 
-/*---------------------------Helper Functions-------------------------*/
+/*--------------------------- Helper Functions -------------------------*/
+/*--------------------------- Used Frequently --------------------------*/
+func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []byte) (key []byte, err error) {
+	byteHardCodedText, err := json.Marshal(hardCodedText)
+	if err != nil {
+		return nil, errors.New(errorMessage + "specifically marshalling")
+	}
+	wholeKey, err := userlib.HashKDF(hashedPassword[:16], byteHardCodedText)
+	key = wholeKey[0:16]
+	if err != nil {
+		return nil, errors.New(errorMessage)
+	}
+	return key, nil
+}
+func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEncryptedObject []byte, err error) {
+	//could return error if the original object are ///////////////////////
+	//pass in the MARSHALED objects get back an encrypted and mac object
+
+	IV := userlib.RandomBytes(16)
+	//MAC(ENC(RSAprivateKey))
+	//convert to byte
+	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHidden)
+
+	//error userlib.Hash(macKey) need to be 16 bytes
+	tagEncryptedObject, err := userlib.HMACEval(macKey, encryptedObject)
+	if err != nil {
+		return nil, errors.New("could not generate MAC tag over hidden object")
+	}
+	//full encrypted and mac tagged RSA private key
+	macEncryptedObject = append(tagEncryptedObject, encryptedObject...)
+	return macEncryptedObject, nil
+}
+func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
+	macTag := protectedObject[:64]
+	encryptedObject := protectedObject[64:]
+	possiblyCorruptedTag, err := userlib.HMACEval(macKey, encryptedObject)
+	if err != nil {
+		return false, errors.New("could not reconstruct the mac tag in checking the mac")
+	}
+	ok = userlib.HMACEqual(macTag, possiblyCorruptedTag)
+	return ok, nil
+
+}
+func Decrypt(protectedObject []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
+	encryptedObject := protectedObject[64:]
+	if len(encryptedObject) < userlib.AESBlockSizeBytes {
+		return nil, errors.New("object length is too short to decrypt")
+	}
+	decryptedObject = userlib.SymDec(decryptionKey, encryptedObject)
+	return decryptedObject, nil
+}
+func GetUserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err error) {
+	if len(username) == 0 {
+		return nil, userlib.UUID{}, errors.New("username cannot be empty") //error statement for empty username
+	}
+	///convert to byte
+	byteUsername, err := json.Marshal(username)
+	if err != nil {
+		return nil, userlib.UUID{}, errors.New("could not convert username to bytes")
+	}
+	byteHashedUsername := userlib.Hash(byteUsername)
+	hashedUsername, err = json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
+	if err != nil {
+		return nil, userlib.UUID{}, errors.New("could not marshal username in initUser")
+	}
+	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
+	if err != nil {
+		return nil, userlib.UUID{}, errors.New("couldn't marshal the hashed username ")
+	}
+	//has to be 16 bytes because from bytes requires a slice of 16 bytes
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
+	createdUUID, err := uuid.FromBytes(uuidUsername)
+	if err != nil {
+		return nil, userlib.UUID{}, errors.New("couldn't convert user log in into a UUID")
+	}
+
+	return hashedUsername, createdUUID, nil
+}
+func ContainsFile(userdata *User, filename string) (contains bool, err error) {
+	//***need to complete***/
+	//returns whether a filename exists in a person's namespace
+	fileKey, protectedFilename, err := EncryptFileName(userdata, filename)
+	if err != nil {
+		return false, err
+	}
+	protectedFilenameStr := string(protectedFilename)
+
+	if _, exists := userdata.Files[protectedFilenameStr]; exists {
+		return true, nil
+	}
+	if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
+		return true, nil
+	}
+
+	return false, nil
+}
+func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
+	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
+	//getting orginal struct
+	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
+	if err != nil {
+		return nil, errors.New("couldn't marshal the hashed username ")
+	}
+	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
+	createdUUID, err := uuid.FromBytes(uuidUsername)
+	if err != nil {
+		return nil, errors.New("could not reconstruct uuid to update changes")
+	}
+	macEncByteStruct, ok := userlib.DatastoreGet(createdUUID)
+	if !ok {
+		return nil, errors.New("created UUID not in datastore to update changes")
+	}
+	//regenerating mac tag to check
+	encryptionKeyStruct, err := ConstructKey("Encryption Hard-Code for User Struct", "could not create key for struct encryption", hashedPassword)
+	if err != nil {
+		return nil, errors.New("encryption key for struct cannot be made (init user)")
+	}
+	macKeyStruct, err := ConstructKey("Mac Tag Hard-Code for User Struct", "could not create mac key for struct", hashedPassword)
+	if err != nil {
+		return nil, errors.New("mac key for struct cannot be made (init user)")
+	}
+	ok, err = CheckMac(macEncByteStruct, macKeyStruct)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("INTEGRITY ERROR TAGS DONT MATCH")
+	}
+	byteUser, err := Decrypt(macEncByteStruct, encryptionKeyStruct)
+	if err != nil {
+		return nil, err
+	}
+	var OGUser User
+	err = json.Unmarshal(byteUser, &OGUser)
+	if err != nil {
+		return nil, errors.New("could not unmarshal original struct in OriginalStruct function")
+	}
+	return &OGUser, nil
+}
+func EncryptFileName(hashedUsername []byte, hashedPassword []byte, filename string) (fileKey []byte, protectedFilename []byte, err error) {
+	byteFilename, err := json.Marshal(filename)
+	if err != nil {
+		return nil, nil, errors.New("could not retrieve hashed username from struct in encrypting the file name")
+	}
+	uniqueUsernameAndFile := append(hashedUsername, byteFilename...)
+	fileKey = userlib.Argon2Key(hashedPassword, uniqueUsernameAndFile, 16)                                                                   //hashkdf off of this
+	encryptionKeyFilename, err := ConstructKey("encryption key for the filenames", "could not create encryption for the file name", fileKey) //might need to change
+	if err != nil {
+		return nil, nil, err
+	}
+	macKeyFilename, err := ConstructKey("mac key for the filenames", "could not create mac key for the filename", fileKey) //might need to change
+	if err != nil {
+		return nil, nil, err
+	}
+	protectedFilename, err = EncThenMac(encryptionKeyFilename, macKeyFilename, byteFilename)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fileKey, protectedFilename, nil
+
+}
+
+/*
+	func UpdateChanges(user User) (err error) {
+		//any changes locally reflexted on datastore
+
+		//decrypt original struct
+		return nil
+	}
+*/
+/* ------------------------------ Initialize User Helpers ----------------------*/
 func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userlib.PKEEncKey, structRSAPrivateKey []byte, err error) {
 	//generates RSA keys -> puts into key store -> and returns encrypted and maced private key
 	//KEY STORE TYPE DEFINITION
@@ -98,24 +268,6 @@ func UserRSAKeys(hashedUsername []byte, hashedPassword []byte) (publicKey userli
 	}
 
 	return publicKey, structRSAPrivateKey, nil
-}
-func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEncryptedObject []byte, err error) {
-	//could return error if the original object are ///////////////////////
-	//pass in the MARSHALED objects get back an encrypted and mac object
-
-	IV := userlib.RandomBytes(16)
-	//MAC(ENC(RSAprivateKey))
-	//convert to byte
-	encryptedObject := userlib.SymEnc(encryptionKey, IV, objectHidden)
-
-	//error userlib.Hash(macKey) need to be 16 bytes
-	tagEncryptedObject, err := userlib.HMACEval(macKey, encryptedObject)
-	if err != nil {
-		return nil, errors.New("could not generate MAC tag over hidden object")
-	}
-	//full encrypted and mac tagged RSA private key
-	macEncryptedObject = append(tagEncryptedObject, encryptedObject...)
-	return macEncryptedObject, nil
 }
 func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificationKey userlib.DSVerifyKey, structSignatureKey []byte, err error) {
 	//generates signature keys -> puts into key store -> and returns encrypted and maced private key
@@ -170,89 +322,10 @@ func UserSignatureKeys(hashedUsername []byte, hashedPassword []byte) (verificati
 	}
 	return verificationKey, structSignatureKey, nil
 }
-func OriginalStruct(hashedUsername []byte, hashedPassword []byte) (originalUser *User, err error) {
-	//since each getuser creates a local User struct, this function obtains a pointer to the original user struct
-	//getting orginal struct
-	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
-	if err != nil {
-		return nil, errors.New("couldn't marshal the hashed username ")
-	}
-	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
-	createdUUID, err := uuid.FromBytes(uuidUsername)
-	if err != nil {
-		return nil, errors.New("could not reconstruct uuid to update changes")
-	}
-	macEncByteStruct, ok := userlib.DatastoreGet(createdUUID)
-	if !ok {
-		return nil, errors.New("created UUID not in datastore to update changes")
-	}
-	//regenerating mac tag to check
-	encryptionKeyStruct, err := ConstructKey("Encryption Hard-Code for User Struct", "could not create key for struct encryption", hashedPassword)
-	if err != nil {
-		return nil, errors.New("encryption key for struct cannot be made (init user)")
-	}
-	macKeyStruct, err := ConstructKey("Mac Tag Hard-Code for User Struct", "could not create mac key for struct", hashedPassword)
-	if err != nil {
-		return nil, errors.New("mac key for struct cannot be made (init user)")
-	}
-	ok, err = CheckMac(macEncByteStruct, macKeyStruct)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, errors.New("INTEGRITY ERROR TAGS DONT MATCH")
-	}
-	byteUser, err := Decrypt(macEncByteStruct, encryptionKeyStruct)
-	if err != nil {
-		return nil, err
-	}
-	var OGUser User
-	err = json.Unmarshal(byteUser, &OGUser)
-	if err != nil {
-		return nil, errors.New("could not unmarshal original struct in OriginalStruct function")
-	}
-	return &OGUser, nil
-}
-func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
-	macTag := protectedObject[:64]
-	encryptedObject := protectedObject[64:]
-	possiblyCorruptedTag, err := userlib.HMACEval(macKey, encryptedObject)
-	if err != nil {
-		return false, errors.New("could not reconstruct the mac tag in checking the mac")
-	}
-	ok = userlib.HMACEqual(macTag, possiblyCorruptedTag)
-	return ok, nil
 
-}
-func Decrypt(protectedObject []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
-	encryptedObject := protectedObject[64:]
-	if len(encryptedObject) < userlib.AESBlockSizeBytes {
-		return nil, errors.New("object length is too short to decrypt")
-	}
-	decryptedObject = userlib.SymDec(decryptionKey, encryptedObject)
-	return decryptedObject, nil
-}
+/*------------------------------ Obtaining Struct Data -------------------------*/
+/*------------------------------ Public Data -------------------------*/
 
-/*
-	func UpdateChanges(user User) (err error) {
-		//any changes locally reflexted on datastore
-
-		//decrypt original struct
-		return nil
-	}
-*/
-func ConstructKey(hardCodedText string, errorMessage string, hashedPassword []byte) (key []byte, err error) {
-	byteHardCodedText, err := json.Marshal(hardCodedText)
-	if err != nil {
-		return nil, errors.New(errorMessage + "specifically marshalling")
-	}
-	wholeKey, err := userlib.HashKDF(hashedPassword[:16], byteHardCodedText)
-	key = wholeKey[0:16]
-	if err != nil {
-		return nil, errors.New(errorMessage)
-	}
-	return key, nil
-}
 func GetRSAPublicKey(personsUsername string) (RSAKey userlib.PublicKeyType, err error) {
 	//given a personsUsername (share or initialize) gets the users RSA public Key
 	if len(personsUsername) == 0 {
@@ -311,79 +384,27 @@ func GetVerificationKey(personsUsername string) (verificationKey userlib.PublicK
 		return userlib.PublicKeyType{}, errors.New("recipient does not exist")
 	}
 	return verificationKey, nil
+}
+
+/*------------------------------ Private Data -------------------------*/
+func GetSignatureKey(userdataptr *User) (signatureKey userlib.PrivateKeyType, err error) {
 
 }
 
-/*
-func GetSignatureKey(userdataptr *User)(signatureKey userlib.PrivateKeyType, err error) {
+func GetPrivateKey(hashedPassword []byte) (privateKey userlib.PrivateKeyType, err error) {
+	decryptionKeyPrivateEncryption, err := ConstructKey("RSA Private Key Encryption Key", "could not create key for RSA key encryption", hashedPassword)
+	if err != nil {
+		return userlib.PrivateKeyType{}, err
+	}
+	macKeyPrivate, err := ConstructKey("RSA MAC Key", "could not create key for RSA MAC Tag", hashedPassword)
+	if err != nil {
+		return userlib.PrivateKeyType{}, err
+	}
+	return userlib.PrivateKeyType{}, nil
 
 }
 
-	func GetPrivateKey(hashedPassword []byte)(privateKey userlib.PrivateKeyType, err error) {
-		decryptionKeyPrivateEncryption, err := ConstructKey("RSA Private Key Encryption Key", "could not create key for RSA key encryption", hashedPassword)
-		if err != nil {
-			return userlib.PrivateKeyType{}, err
-		}
-		macKeyPrivate, err := ConstructKey("RSA MAC Key", "could not create key for RSA MAC Tag", hashedPassword)
-		if err != nil {
-			return userlib.PrivateKeyType{}, err
-		}
-		return userlib.PrivateKeyType{}, nil
-
-}
-*/
-func GetUserUUID(username string) (hashedUsername []byte, UUID userlib.UUID, err error) {
-	if len(username) == 0 {
-		return nil, userlib.UUID{}, errors.New("username cannot be empty") //error statement for empty username
-	}
-	///convert to byte
-	byteUsername, err := json.Marshal(username)
-	if err != nil {
-		return nil, userlib.UUID{}, errors.New("could not convert username to bytes")
-	}
-	byteHashedUsername := userlib.Hash(byteUsername)
-	hashedUsername, err = json.Marshal(byteHashedUsername) //when unmarshaled gives you the hashed byte version of the username
-	if err != nil {
-		return nil, userlib.UUID{}, errors.New("could not marshal username in initUser")
-	}
-	byteHardCodedText, err := json.Marshal("Hard-coded temp fix to hash length")
-	if err != nil {
-		return nil, userlib.UUID{}, errors.New("couldn't marshal the hashed username ")
-	}
-	//has to be 16 bytes because from bytes requires a slice of 16 bytes
-	uuidUsername := userlib.Argon2Key(userlib.Hash(hashedUsername), byteHardCodedText, 16)
-	createdUUID, err := uuid.FromBytes(uuidUsername)
-	if err != nil {
-		return nil, userlib.UUID{}, errors.New("couldn't convert user log in into a UUID")
-	}
-
-	return hashedUsername, createdUUID, nil
-
-}
-
-/*
-func EncryptFileName(hashedUsername []byte, hashedPassword []byte, filename string) (fileKey []byte, protectedFilename []byte, err error) {
-	byteFilename, err := json.Marshal(filename)
-	if err != nil {
-		return nil, nil, errors.New("could not retrieve hashed username from struct in encrypting the file name")
-	}
-	uniqueUsernameAndFile := append(hashedUsername, byteFilename...)
-	fileKey = userlib.Argon2Key(hashedPassword, uniqueUsernameAndFile, 16)                                                                   //hashkdf off of this
-	encryptionKeyFilename, err := ConstructKey("encryption key for the filenames", "could not create encryption for the file name", fileKey) //might need to change
-	if err != nil {
-		return nil, nil, err
-	}
-	macKeyFilename, err := ConstructKey("mac key for the filenames", "could not create mac key for the filename", fileKey) //might need to change
-	if err != nil {
-		return nil, nil, err
-	}
-	protectedFilename, err = EncThenMac(encryptionKeyFilename, macKeyFilename, byteFilename)
-	if err != nil {
-		return nil, nil, err
-	}
-	return fileKey, protectedFilename, nil
-
-}
+/*----------------------------------- File Sharing Helpers ------------------------*/
 func SharingFileAddress(signatureKey userlib.PrivateKeyType, key []byte, recipientName string, fileName string) (err error) {
 	//check recipient exists
 	_, recipientUUID, err := GetUserUUID(recipientName)
@@ -418,9 +439,9 @@ func BecomeAParent(userdataptr *User, recipientName string, sharingKey string) (
 	2) encrypt and mac the recipients name
 	3) sign it
 	4) add it to the communications channel shared with list
-*/
-//check recipient exists
-/*
+	*/
+	//check recipient exists
+
 	_, recipientUUID, err := GetUserUUID(recipientName)
 	if err != nil {
 		return err
@@ -445,24 +466,7 @@ func BecomeAParent(userdataptr *User, recipientName string, sharingKey string) (
 
 }
 
-func ContainsFile(userdata *User, filename string) (result bool, err error) {
-	/*
-		//returns whether a filename exists in a person's namespace
-		fileKey, protectedFilename, err := EncryptFileName(userdata, filename)
-		if err != nil {
-			return false, err
-		}
-		protectedFilenameStr := string(protectedFilename)
-
-		if _, exists := userdata.Files[protectedFilenameStr]; exists {
-			return true, nil
-		}
-		if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
-			return true, nil
-		}
-
-	return false, nil
-}*/
+/* --------------------------------------------TO DO FUNCTIONS ---------------------------------------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
 	hashedUsername, createdUUID, err := GetUserUUID(username)
