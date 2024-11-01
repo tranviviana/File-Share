@@ -40,8 +40,10 @@ type CommunicationsTree struct {
 	AccessibleUsers []byte
 }
 type File struct {
-	FileContentPointer userlib.UUID //randomized and then do counter to hashKDF and get fileContentStruct
-	FileLength         uint
+	FileContentPointers []userlib.UUID //randomized and then do counter to hashKDF and get fileContentStruct
+	FileLength          uint
+	SymEncKey           []byte
+	HMACKey             []byte
 }
 type FileContent struct {
 	BlockEncrypted string
@@ -699,6 +701,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		if !ok {
 			return errors.New("file does not exist in datastore")
 		}
+		//check for integrity
 		err = json.Unmarshal(fileData, &file)
 		if err != nil {
 			return errors.New("could not unmarshal existing file")
@@ -706,7 +709,15 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		if uint(len(content)) < file.FileLength {
 			//delete content
 		}
+		//encrypt and put in new content
+		file.FileLength = uint(len(content))
+		fileBytes, err := json.Marshal(file)
+		if err != nil {
+			return errors.New("could not marshal updated file struct")
+		}
+		userlib.DatastoreSet(fileUUID, fileBytes)
 
+		return nil
 	}
 	//count from uuid to hashkdf to get filecontent struct
 	//modify file struct enrypted content
