@@ -356,7 +356,7 @@ func encryptFileName(userdataptr *User, filename string) (fileKey []byte, protec
 	return fileKey, protectedFilename, nil
 }
 func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fileName string) (err error){
-	/*take the key and then RSA encrypt it with the recipients public key, sign it with your private key*/
+
 	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
 	if err != nil {
 		return err
@@ -376,25 +376,18 @@ func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fil
     if !exists {
         return errors.New("shared file does not exist")
     }
-	/*
-	3) the recipients name append sign with your private key 
-	4) Mac and encrypt with the key passed in Hashkdf with hardcoded bytes
-	5) put total encryption into shared files (2)
-	*/
-	macKey := userlib.Argon2Key(key[:], []byte("macKey"), 16) // Generate MAC key
+
+	macKey := userlib.Argon2Key(key[:], []byte("macKey"), 16) 
     encryptedSignature, err := EncThenMac(macKey, signature)
     if err != nil {
         return err
     }
 
-    // Step 5: Store the total encryption into shared files
-    // Retrieve the CommunicationsTree
     commTree := CommunicationsTree{
-        CurrentKey:      encryptedSignature,
-        AccessibleUsers: []byte(recipientName), // Modify as per your access control logic
+        CurrentKey: encryptedSignature,
+        AccessibleUsers: []byte(recipientName), 
     }
 
-    // Store the CommunicationsTree in the Datastore
     userlib.DatastoreSet(commChannelUUID, commTree)
 
     return nil
