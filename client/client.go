@@ -356,7 +356,6 @@ func encryptFileName(userdataptr *User, filename string) (fileKey []byte, protec
 	return fileKey, protectedFilename, nil
 }
 func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fileName string) (err error){
-
 	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
 	if err != nil {
 		return err
@@ -370,15 +369,14 @@ func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fil
 	if err != nil {
 		return false, err
 	}
-	sharedFiles := userdata.SharedFiles
 	protectedFilenameStr := string(protectedFilename)
 	commChannelUUID, exists := userdataptr.SharedFiles[protectedFilenameStr]
     if !exists {
         return errors.New("shared file does not exist")
     }
-
-	macKey := userlib.Argon2Key(key[:], []byte("macKey"), 16) 
-    encryptedSignature, err := EncThenMac(macKey, signature)
+	hashed := Hash(recipient.PrivateKey, byte[]("key for sharing file address"))
+	macKey := userlib.Argon2Key(recipient.PrivateKey, []byte("macKey"), 16) 
+    encryptedSignature, err := EncThenMac(macKey, signature,hashed )
     if err != nil {
         return err
     }
@@ -397,6 +395,15 @@ func becomeAParent (userdataptr *User, recipientName string, sharingKey string) 
 	3) sign it
 	4) add it to the communications channel shared with list
 	*/
+	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
+	if err != nil {
+		return err
+	}
+	recipient, ok = userlib.DatastoreGet(recipientUUID)
+	if !ok {
+		return errors.New("recipient does not exist")
+	}
+	protectedRecipientName, err = EncThenMac()
 }
 func containsFile(userdata *User, filename string) (result bool, err error) {
 	//returns whether a filename exists in a person's namespace
