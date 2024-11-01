@@ -349,7 +349,7 @@ func encryptFileName(userdataptr *User, filename string) (fileKey []byte, protec
 	if err != nil {
 		return nil, nil, err
 	}
-	protectedFilename, err = EncThenMac(encryptionKeyFilename, macKeyFilename, byteFilename)
+	protectedFilename, err = (encryptionKeyFilename, macKeyFilename, byteFilename)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -376,7 +376,8 @@ func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fil
     }
 	hashed := Hash(recipient.PrivateKey, byte[]("key for sharing file address"))
 	macKey := userlib.Argon2Key(recipient.PrivateKey, []byte("macKey"), 16) 
-    encryptedSignature, err := EncThenMac(macKey, signature,hashed )
+	signature, err := userlib.DSSign(userdataptr.SignatureKey, macKey)
+    encryptedSignature, err := EncThenMac(recipient.PrivateKey, macKey,signature )
     if err != nil {
         return err
     }
@@ -403,7 +404,7 @@ func becomeAParent (userdataptr *User, recipientName string, sharingKey string) 
 	if !ok {
 		return errors.New("recipient does not exist")
 	}
-	protectedRecipientName, err = EncThenMac()
+	protectedRecipientName, err = EncThenMac(encryptionKey, macKey, recipientName)
 }
 func containsFile(userdata *User, filename string) (result bool, err error) {
 	//returns whether a filename exists in a person's namespace
