@@ -688,15 +688,21 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	userdataptr = &userdata
 	return userdataptr, nil
 }
-
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	protectedFile, err := EncryptFileName(userdata.username, userdata.hashedpassword, filename)
-	if err != nil {
-		return err
-	}
-	hashedPassword := userdata.hashedpassword
 	fileExists, fileUUID, err := GetFileUUID(userdata, filename)
+	var file File
 	if fileExists {
+		fileData, ok := userlib.DatastoreGet(fileUUID)
+		if !ok {
+			return errors.New("file does not exist in datastore")
+		}
+		err = json.Unmarshal(fileData, &file)
+		if err != nil {
+			return errors.New("could not unmarshal existing file")
+		}
+		if uint(len(content)) < file.FileLength {
+			//delete content
+		}
 
 	}
 	//count from uuid to hashkdf to get filecontent struct
