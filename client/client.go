@@ -38,7 +38,6 @@ type CommunicationsTree struct {
 	AccessibleUsers []byte
 }
 type File struct {
-	CommChannel        userlib.UUID
 	FileContentPointer userlib.UUID //randomized and then do counter to hashKDF and get fileContentStruct
 	FileLength         uint
 }
@@ -349,85 +348,12 @@ func encryptFileName(userdataptr *User, filename string) (fileKey []byte, protec
 	if err != nil {
 		return nil, nil, err
 	}
-	protectedFilename, err = (encryptionKeyFilename, macKeyFilename, byteFilename)
+	protectedFilename, err = EncThenMac(encryptionKeyFilename, macKeyFilename, byteFilename)
 	if err != nil {
 		return nil, nil, err
 	}
 	return fileKey, protectedFilename, nil
-}
-func sharingFileAddress(userdataptr *User, key [byte], recipientName string, fileName string) (err error){
-	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
-	if err != nil {
-		return err
-	}
-	recipient, ok = userlib.DatastoreGet(recipientUUID)
-	if !ok {
-		return errors.New("recipient does not exist")
-	}
-	
-	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
-	if err != nil {
-		return false, err
-	}
-	protectedFilenameStr := string(protectedFilename)
-	commChannelUUID, exists := userdataptr.SharedFiles[protectedFilenameStr]
-    if !exists {
-        return errors.New("shared file does not exist")
-    }
-	hashed := Hash(recipient.PrivateKey, byte[]("key for sharing file address"))
-	macKey := userlib.Argon2Key(recipient.PrivateKey, []byte("macKey"), 16) 
-	signature, err := userlib.DSSign(userdataptr.SignatureKey, macKey)
-    encryptedSignature, err := EncThenMac(recipient.PrivateKey, macKey,signature )
-    if err != nil {
-        return err
-    }
 
-    commChannel := CommunicationsChannel{
-        FileAddress: []userlib.UUID{commChannelUUID}, // Store the file address
-        SharedWith:  []userlib.UUID{recipientUUID},    // Add the recipient to the shared list
-    }
-
-    userlib.DatastoreSet(commChannelUUID, commChannel)
-} 
-func becomeAParent (userdataptr *User, recipientName string, sharingKey string) (err error){
-	/*this will be used in create invititation
-	1) check that recipient exists
-	2) encrypt and mac the recipients name
-	3) sign it
-	4) add it to the communications channel shared with list
-	*/
-	hashedRecipientName, recipientUUID, err = getuserUUID(recipientName)
-	if err != nil {
-		return err
-	}
-	recipient, ok = userlib.DatastoreGet(recipientUUID)
-	if !ok {
-		return errors.New("recipient does not exist")
-	}
-	protectedRecipientName, err = EncThenMac(encryptionKey, macKey, recipientName)
-}
-func containsFile(userdata *User, filename string) (result bool, err error) {
-	//returns whether a filename exists in a person's namespace
-	fileKey, protectedFilename, err := encryptFileName(userdata, filename)
-	if err != nil {
-		return false, err
-	}
-	ownedFiles := userdata.Files
-	sharedFiles := userdata.SharedFiles
-	protectedFilenameStr := string(protectedFilename)
-
-    // Check if the protected filename exists in owned files
-    if _, exists := userdata.Files[protectedFilenameStr]; exists {
-        return true, nil
-    }
-
-    // Check if the protected filename exists in shared files
-    if _, exists := userdata.SharedFiles[protectedFilenameStr]; exists {
-        return true, nil
-    }
-
-    // If not found in both, return false
-    return false, nil
 }
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//convert to byte
@@ -540,6 +466,29 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 
 	userdataptr = &userdata
 	return userdataptr, nil
+}
+func sharingFileAddress(userdataptr *User, key []byte, recipientName string) (err error) {
+	/*take the key and then RSA encrypt it with the recipients public key, sign it with your private key*/
+}
+func becomeAParent(userdataptr *User, recipientName string, sharingKey string) (err error) {
+	//this will be used in create invititation
+	/*
+		1) check that recipient exists
+		2) encrypt and mac the recipients name
+		3) sign it
+		4) add it to the communications channel shared with list
+	*/
+
+}
+func containsFile(filename string, userdata *User) (result bool, err error) {
+	//returns whether a filename exists in a person's namespace
+	protectedFile, err := encryptFileName(userdata, filename)
+	if err != nil {
+		return err
+	}
+	ownedFiles := userdata.Files
+	sharedFiles := userdata.SharedFiles
+
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
