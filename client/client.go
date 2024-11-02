@@ -839,7 +839,7 @@ func copiedCC(protectedRecKey []byte, ownerCommunications *CommunicationsChannel
 	//fill those encrypted items into that NEW comunications node besides shared with item
 	//marshal and encrypt
 	//return the protected communication node meant for the recipient
-	ownerCommunications
+	ownerCommunnic
 }
 
 //when owner creates an invitation theyll create a copied CC and data store set the uuid of generate RECcckey
