@@ -5,7 +5,7 @@ package client_test
 
 /*
 Types of tests
-1) assertion test
+1 assertion test
 */
 
 import (

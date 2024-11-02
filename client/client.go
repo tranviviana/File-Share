@@ -106,7 +106,6 @@ func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 	}
 	return ok, nil
 
-}
 func Decrypt(protectedObject []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
 	//decrypts the object using the key
 	//check length minimum
