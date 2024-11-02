@@ -238,29 +238,29 @@ func RestoreRSAPublic(username string) (PkeyOnKeystore string, publicKey userlib
 	//marshal the username and hashkdf inut text
 	byteUsername, err := json.Marshal(username)
 	if err != nil {
-		return PkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not marshal username")
+		return "", userlib.PublicKeyType{}, errors.New("could not marshal username")
 	}
 	hardCodedText, err := json.Marshal("KeyStore RSA public key")
 	if err != nil {
-		return PkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not marshal hard coded text for RSA")
+		return "", userlib.PublicKeyType{}, errors.New("could not marshal hard coded text for RSA")
 	}
 	keyStoreKeyBytes, err := userlib.HashKDF(hardCodedText[:16], byteUsername)
 	if err != nil {
-		return PkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not hash username")
+		return "", userlib.PublicKeyType{}, errors.New("could not hash username")
 	}
 	jsonKeyStoreBytes, err := json.Marshal(keyStoreKeyBytes)
 	if err != nil {
-		return PkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not marshal keyStoreByte to a json readable")
+		return "", userlib.PublicKeyType{}, errors.New("could not marshal keyStoreByte to a json readable")
 	}
 	var keyStoreKey string
 	err = json.Unmarshal(jsonKeyStoreBytes, &keyStoreKey)
 	if err != nil {
-		return PkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not unmarshal to convert bytes to a string")
+		return "", userlib.PublicKeyType{}, errors.New("could not unmarshal to convert bytes to a string")
 	}
 	//find unique hash corresponding RSA key value pair
 	RSAPublicKey, ok := userlib.KeystoreGet(keyStoreKey)
 	if !ok {
-		return PkeyOnKeystore, userlib.PublicKeyType{}, errors.New("no RSA Public key found for username")
+		return "", userlib.PublicKeyType{}, errors.New("no RSA Public key found for username")
 	}
 	return keyStoreKey, RSAPublicKey, nil
 }
@@ -269,35 +269,35 @@ func RestoreVERIFICATIONPublic(username string) (VkeyOnKeystore string, verifica
 	//marshal the username and hashkdf input text
 	byteUsername, err := json.Marshal(username)
 	if err != nil {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not marshal username")
+		return "", userlib.PublicKeyType{}, errors.New("could not marshal username")
 	}
 	hardCodedText, err := json.Marshal("KeyStore Signature and Verification")
 	if err != nil {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not marshal hard coded text for Signature and Verification")
+		return "", userlib.PublicKeyType{}, errors.New("could not marshal hard coded text for Signature and Verification")
 	}
 	tempKeyStoreBytes, err := userlib.HashKDF(hardCodedText[:16], byteUsername)
 	if err != nil {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not hashKDF once for Signature and Verification")
+		return "", userlib.PublicKeyType{}, errors.New("could not hashKDF once for Signature and Verification")
 	}
 	//hash again for the verification key
 	keyStoreKeyBytes, err := userlib.HashKDF(tempKeyStoreBytes[:16], byteUsername)
 	if err != nil {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not hashKDF twice for Signature and Verification")
+		return "", userlib.PublicKeyType{}, errors.New("could not hashKDF twice for Signature and Verification")
 	}
 	//marshal and unmarshal the double hashed user
 	jsonKeyStoreKey, err := json.Marshal(keyStoreKeyBytes)
 	if err != nil {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not marshal keyStoreByte to a json readable")
+		return "", userlib.PublicKeyType{}, errors.New("could not marshal keyStoreByte to a json readable")
 	}
 	var keyStoreKey string
 	err = json.Unmarshal(jsonKeyStoreKey, &keyStoreKey)
 	if err != nil {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("could not unmarshal to convert bytes to a string")
+		return "", userlib.PublicKeyType{}, errors.New("could not unmarshal to convert bytes to a string")
 	}
 	//find its corresponding unique verification key in keystore
 	verificationKey, ok := userlib.KeystoreGet(keyStoreKey)
 	if !ok {
-		return VkeyOnKeystore, userlib.PublicKeyType{}, errors.New("no verification key found for username")
+		return "", userlib.PublicKeyType{}, errors.New("no verification key found for username")
 	}
 	return keyStoreKey, verificationKey, nil
 }
@@ -353,6 +353,73 @@ func ReconstructInitialize(usernameInput string, password string) (createdUUID u
 	return userUUID, hashedPasswordKDF, byteUsername, nil
 }
 
+// regenerate cc or acceptance. use UUID to look up in datastore
+// 1. check if the cc exists
+// a. decrypt the object protectected cc/a struct. check mac, decrypt
+// b.unmarshal return pointer
+// c. gets us the cc or acceptance struct!
+// 2. checks whether cc or acceptance struct
+// has prop/flag to see if owner
+// check flag of owner to get which one it is
+func RegenerateUUIDCCA(protectedKey []byte) (CCAuuid uuid.UUID, err error) {
+	//get the uuid of the communication channel OR acceptance struct depending on if owner OR sharer respectively -- from a protected argon2key
+	//hash the protected key to get communications channel uuid key
+	hardCodedText, err := json.Marshal("UUID key to hash with protected key for cc and a struct")
+	ccaUUIDkey, err := userlib.HashKDF(protectedKey, hardCodedText[:16])
+	if err != nil {
+		return uuid.Nil, errors.New("could not hashkdf the protected key for CC or A structs")
+	}
+	CCAuuid, err = uuid.FromBytes(ccaUUIDkey[:16])
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert ccaUUIDkey to accessible uuid")
+	}
+	return CCAuuid, nil
+}
+
+/*
+func GetCCorA()
+// gets protectedCCA bytes from datastire. if theres val []byte. if errors --> new struct
+*/
+func IsCC(CCAuuid uuid.UUID, protectedCCA []byte, cCAprotectedKey []byte) (owner bool, err error) {
+	//BE CAREFUL USING THIS ONE
+	//protectedCCA to minimize calls to datastorre
+	cCaEncryptionKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CCA struct", cCAprotectedKey)
+	if err != nil {
+		return false, err
+	}
+	cCaMacKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CCA struct", cCAprotectedKey)
+	if err != nil {
+		return false, err
+	}
+	ByteCCAAddress, err := CheckAndDecrypt(protectedCCA, cCaMacKey, cCaEncryptionKey)
+	if err != nil {
+		return false, err
+	}
+	var CCAddress CommunicationsChannel
+	err = json.Unmarshal(ByteCCAAddress, &CCAddress)
+	if err != nil {
+		var AAddress Accepted
+		err = json.Unmarshal(ByteCCAAddress, &AAddress)
+		if err != nil {
+			return false, errors.New("could not unmarshal CommunicationsChannel and Acceptance struct")
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+/*
+from output of iscc --> choose which to regenerate
+func RegenerateCC(protectedCCA []byte,  cCAprotectedKey []byte) (ccPtr *CommunicationsChannel, err error) {
+
+}
+func RegenerateA(protectedCCA []byte,  cCAprotectedKey []byte) (acceptedInvitePtr *Accepted, err error) {
+
+}
+func CreateCommunicationsChannel() {
+
+}*/
+
 /* ----------- END Helper Functions ---------*/
 /* ----------- Fill Section Functions -------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
@@ -406,7 +473,6 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	userlib.DatastoreSet(createdUUID, protectedStruct)
 
 	return &user, nil
-
 }
 
 func GetUser(username string, password string) (userdataptr *User, err error) {
@@ -457,20 +523,59 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 }
 
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	/*storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.username))[:16])
+	/*byteFilename, err := json.Marshal(filename)
 	if err != nil {
-		return err
+		return errors.New("could not marshal filename")
 	}
-	contentBytes, err := json.Marshal(content)
+	byteHardCodedText, err := json.Marshal("cc or a hard-coded text")
 	if err != nil {
-		return err
+		return errors.New("could not marshal hard coded text")
 	}
+	cCApasswordKey, err := userlib.HashKDF(userdata.hashedPasswordKDF, byteFilename)
+	if err != nil {
+		return errors.New("could not hash kdf the filename")
+	}
+	cCAByteKey := append(byteFilename, cCApasswordKey...)
+	cCAByteKey = append(cCAByteKey, userdata.username...)
 
-	userlib.DatastoreSet(storageKey, contentBytes) */
-	return
+	cCAprotectedKey := userlib.Argon2Key(cCAByteKey, userdata.username, 16) // hashKDF
+	CCAuuid, err := RegenerateUUIDCCA(cCAprotectedKey)
+	if err != nil {
+		return err
+	}
+	exists, err := CheckCommChannelExistence()
+	if exists && err == nil {
+		//restore in old file location
+	} else {
+		cCaEncryptionKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CCA struct", cCAprotectedKey)
+		if err != nil {
+			return err
+		}
+		cCaMacKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CCA struct", cCAprotectedKey)
+		if err != nil {
+			return err
+		}
+
+	}*/
+	return nil
 }
 
+/*storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + userdata.username))[:16])
+if err != nil {
+	return err
+}
+contentBytes, err := json.Marshal(content)
+if err != nil {
+	return err
+}
+
+userlib.DatastoreSet(storageKey, contentBytes) */
+
 func (userdata *User) AppendToFile(filename string, content []byte) error {
+	/*byteFilename, err := json.Marshal(filename)
+	if err != nil{
+		return errors.New("could not marshal filename")
+	}*/
 	return nil
 }
 
