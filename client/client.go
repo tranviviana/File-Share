@@ -530,7 +530,7 @@ func ProtectFileSharedWith(sharedWith []byte, cCAprotectedKey []byte) (protected
 	if err != nil {
 		return nil, err
 	}
-	protectedSharedWith, err := EncThenMac(encryptionSharedWith, macSharedWith, sharedWith)
+	protectedSharedWith, err = EncThenMac(encryptionSharedWith, macSharedWith, sharedWith)
 	if err != nil {
 		return nil, err
 	}
@@ -674,17 +674,17 @@ func ProtectFileLength(protectedFileKey []byte, fileLength int) (protectedFileLe
 	if err != nil {
 		return nil, errors.New("could not marshal the file length to protect the file length")
 	}
-	encryptionFileLength, err = ConstructKey("encryption key for the file length", "could not create encryption key for the file length", protectedFileKey)
+	encryptionFileLength, err := ConstructKey("encryption key for the file length", "could not create encryption key for the file length", protectedFileKey)
 	if err != nil {
 		return nil, err
 	}
-	macFileLength, err = ConstructKey("mac Key for the file length", "could not create mac key for the file length", protectedFileKey)
+	macFileLength, err := ConstructKey("mac Key for the file length", "could not create mac key for the file length", protectedFileKey)
 	if err != nil {
 		return nil, err
 	}
-	protectedFileLength, err := EncThenMac(encryptionFileLength, macFileLength, byteFileLength)
+	protectedFileLength, err = EncThenMac(encryptionFileLength, macFileLength, byteFileLength)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return protectedFileLength, nil
 }
