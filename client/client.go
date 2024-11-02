@@ -4,6 +4,7 @@ package client
 
 import (
 	"encoding/json"
+	"strconv"
 
 	userlib "github.com/cs161-staff/project2-userlib"
 	"github.com/google/uuid"
@@ -353,13 +354,13 @@ func ReconstructInitialize(usernameInput string, password string) (createdUUID u
 
 func RegenerateUUIDCCA(cCAprotectedKey []byte) (CCAuuid uuid.UUID, err error) {
 	//get the uuid of the communication channel OR acceptance struct depending on if owner OR sharer respectively -- from a protected argon2key
-	//hash the protected key 
+	//hash the protected key
 	hardCodedText, err := json.Marshal("UUID key to hash with protected key for cc and a struct")
 	ccaUUIDkey, err := userlib.HashKDF(cCAprotectedKey, hardCodedText[:16])
 	if err != nil {
 		return uuid.Nil, errors.New("could not hashkdf the protected key for CC or A structs")
 	}
-	//get communications channel OR acceptance uuid   
+	//get communications channel OR acceptance uuid
 	CCAuuid, err = uuid.FromBytes(ccaUUIDkey[:16])
 	if err != nil {
 		return uuid.Nil, errors.New("could not convert ccaUUIDkey to accessible uuid")
@@ -414,6 +415,7 @@ func RegenerateA(protectedA []byte, AMacKey []byte, ADecryptKey []byte) (accepte
 	}
 	return acceptedPtr, nil
 }
+
 /*-----------------USED AT THE START TO GET THE ARGON2KEY of File----------------------*/
 func GetKeyFileName(filename string, hashedPasswordKDF []byte, username []byte) (cCAprotectedKey []byte, protectedFilename []byte, err error) {
 	//returns the basis key that the communications struct and a struct should be encrypted wtih
@@ -449,9 +451,7 @@ func GetKeyFileName(filename string, hashedPasswordKDF []byte, username []byte) 
 	return cCAprotectedKey, protectedFilename, nil
 
 }
-
-
-func ProtectOwnerCC(sharedWith []byte, cCAprotectedKey []byte) (protectedOwnerCCStruct []byte, err error){
+func ProtectOwnerCC(sharedWith []byte, cCAprotectedKey []byte) (protectedOwnerCCStruct []byte, err error) {
 	//called in the initial stored file and when you revoke so that the communications channel of the owner is updated and stored in datasotre with the proper information
 	var ownerCC CommunicationsChannel
 	protectedShareWith, err := ProtectFileSharedWith(sharedWith, cCAprotectedKey)
@@ -488,9 +488,10 @@ func ProtectOwnerCC(sharedWith []byte, cCAprotectedKey []byte) (protectedOwnerCC
 	return protectedOwnerCC, nil
 
 }
+
 /*------Helper function to protect the content in the CC functions of the owner ALL STUFF IN THE COMMUNICATIONS CHANNEL OF OWNER ------*/
 func ProtectFileKey(cCAprotectedKey []byte) (protectedFileKey []byte, err error) {
-	// in owners communication channel 
+	// in owners communication channel
 	fileSourceKey := userlib.RandomBytes(128)
 	fileSalt := userlib.RandomBytes(128)
 	fileKey := userlib.Argon2Key(fileSourceKey, fileSalt, 16)
@@ -529,7 +530,7 @@ func ProtectFileUUID(cCAprotectedKey []byte) (protectedFileUUID []byte, err erro
 	}
 	return protectedFileUUID, nil
 }
-func ProtectFileSharedWith(sharedWith []byte,cCAprotectedKey []byte) (protectedSharedWith []byte, err error) {
+func ProtectFileSharedWith(sharedWith []byte, cCAprotectedKey []byte) (protectedSharedWith []byte, err error) {
 	encryptionSharedWith, err := ConstructKey("encryption key for list of people file was shared with", "could not create sharedWith encryption", cCAprotectedKey)
 	if err != nil {
 		return nil, err
@@ -544,8 +545,9 @@ func ProtectFileSharedWith(sharedWith []byte,cCAprotectedKey []byte) (protectedS
 	}
 	return protectedSharedWith, nil
 }
+
 /*-----END Helper function to protect the content in the CC functions of the owner ------*/
-func RecoverOwnerCCContents(protectedOwnerCC []byte, cCAprotectedKey []byte)(fileKey []byte, fileUUID uuid.UUID, sharedWith []byte, err error) {
+func RecoverOwnerCCContents(protectedOwnerCC []byte, cCAprotectedKey []byte) (fileKey []byte, fileUUID uuid.UUID, sharedWith []byte, err error) {
 	testDecryptionCCStructKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CCA struct", cCAprotectedKey)
 	if err != nil {
 		return nil, nil, nil, err
@@ -572,6 +574,7 @@ func RecoverOwnerCCContents(protectedOwnerCC []byte, cCAprotectedKey []byte)(fil
 	}
 	return fileKey, fileUUID, sharedWith, nil
 }
+
 /*-------- helper functions to restore the content in the CC functions ------------- */
 func RegenerateCC(protectedCC []byte, CCMacKey []byte, CCDecryptKey []byte) (ccPtr *CommunicationsChannel, err error) {
 	byteCC, err := CheckAndDecrypt(protectedCC, CCMacKey, CCDecryptKey)
@@ -585,7 +588,7 @@ func RegenerateCC(protectedCC []byte, CCMacKey []byte, CCDecryptKey []byte) (ccP
 	}
 	return CC, nil
 }
-func RecoverSharedWith(protectedSharedWith []byte, cCAprotectedKey []byte)(sharedWith []byte, err error) {
+func RecoverSharedWith(protectedSharedWith []byte, cCAprotectedKey []byte) (sharedWith []byte, err error) {
 	decryptionShareWith, err := ConstructKey("encryption key for list of people file was shared with", "could not create sharedWith encryption", cCAprotectedKey)
 	if err != nil {
 		return nil, err
@@ -638,9 +641,10 @@ func RecoverFileUUID(protectedFileUUID []byte, cCAprotectedKey []byte) (fileUUID
 	fileUUID = tempfileUUID
 	return fileUUID, nil
 }
+
 /*-------- END helper functions to restore the content in the CC functions ------------- */
 
-func ProtectFile(protectedFileKey []byte, content []byte)(protectedFileStruct []byte, err error) {
+func ProtectFile(protectedFileKey []byte, content []byte) (protectedFileStruct []byte, err error) {
 	//protectedFileKey is from the communications channel
 	var fileStruct File
 	protectedFileLength, err := ProtectFileLength(protectedFileKey, len(content))
@@ -653,7 +657,7 @@ func ProtectFile(protectedFileKey []byte, content []byte)(protectedFileStruct []
 	}
 	fileStruct.FileContentFront = protectedContentUUID
 	fileStruct.FileLength = protectedFileLength
-	
+
 	byteFileStruct, err := json.Marshal(fileStruct)
 	if err != nil {
 		return nil, errors.New("could not marshal the file struct accessible to everyone")
@@ -672,8 +676,9 @@ func ProtectFile(protectedFileKey []byte, content []byte)(protectedFileStruct []
 	}
 	return protectedFileStruct, nil
 }
+
 /*-------Helper functon to protect the content of the file structs useable by all members! ----------*/
-func ProtectFileLength(protectedFileKey []byte, fileLength int)(protectedFileLength []byte, err error) {
+func ProtectFileLength(protectedFileKey []byte, fileLength int) (protectedFileLength []byte, err error) {
 	byteFileLength, err := json.Marshal(fileLength)
 	if err != nil {
 		return nil, errors.New("could not marshal the file length to protect the file length")
@@ -692,9 +697,9 @@ func ProtectFileLength(protectedFileKey []byte, fileLength int)(protectedFileLen
 	}
 	return protectedFileLength, nil
 }
-func ProtectedFrontPtr(protectedFileKey []byte)(protectedContentUUID []byte, err error) {
-	randomUUID = UUID.new()
-	byteRandomUUID, err = json.Marshal(randomUUID)
+func ProtectedFrontPtr(protectedFileKey []byte) (protectedContentUUID []byte, err error) {
+	randomUUID := uuid.New()
+	byteRandomUUID, err := json.Marshal(randomUUID)
 	if err != nil {
 		return nil, errors.New("could not marshal the content point uuid")
 	}
@@ -706,89 +711,212 @@ func ProtectedFrontPtr(protectedFileKey []byte)(protectedContentUUID []byte, err
 	if err != nil {
 		return nil, err
 	}
-	protectedContentUUID, err := EncThenMac(encryptionContentPtr, macContentPtr, byteRandomUUID)
+	protectedContentUUID, err = EncThenMac(encryptionContentPtr, macContentPtr, byteRandomUUID)
 	if err != nil {
 		return nil, err
 	}
 	return protectedContentUUID, nil
-	
+
 }
+
 /*------- END Helper functon to protect the content of the file structs useable by all members! ----------*/
-func RecoverFileContents(protectedFileStruct []byte, protectedFileKey []byte)(frontPtr uuid.UUID, fileLength int, err error) {
-	//protected fileKey will be found in the communications node if they are the owner AND if they are not the owner 
-	decryptionFileStruct, err = ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", protectedFileKey)
+func RecoverFileContents(protectedFileStruct []byte, protectedFileKey []byte) (frontPtr uuid.UUID, fileLength int, err error) {
+	//protected fileKey will be found in the communications node if they are the owner AND if they are not the owner
+	decryptionFileStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, 0, err
 	}
-	macFileStruct, err = ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", protectedFileKey)
+	macFileStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, 0, err
 	}
-	byteFileStruct, err = CheckAndDecrypt(protectedFileStruct, macFileStruct, decryptionFileStruct)
+	byteFileStruct, err := CheckAndDecrypt(protectedFileStruct, macFileStruct, decryptionFileStruct)
 	if err != nil {
-		return nil, nil, err
+		return uuid.Nil, 0, err
 	}
 	var tempFileStruct File
 	err = json.Unmarshal(byteFileStruct, &tempFileStruct)
 	if err != nil {
-		return nil, nil, errors.New("could not unmarshal the file struct")
+		return uuid.Nil, 0, errors.New("could not unmarshal the file struct")
 	}
-	protectedFileContentPtr = tempFileStruct.FileContentFront
-	protectedFileLength = tempFileStruct.FileLength
+	protectedFileContentPtr := tempFileStruct.FileContentFront
+	protectedFileLength := tempFileStruct.FileLength
 
 	frontPtr, err = RecoverFileUUID(protectedFileContentPtr, protectedFileKey)
 	if err != nil {
-		return nil, nil, err
+		return uuid.Nil, 0, err
 	}
 	fileLength, err = RecoverFileLength(protectedFileLength, protectedFileKey)
 	if err != nil {
-		return nil, nil, err
+		return uuid.Nil, 0, err
 	}
 	return frontPtr, fileLength, nil
 }
+
 /*-----helper functions to restore the content of the file structure ---------- */
-func RecoverFileLength(protectedFileLength []byte, protectedFileKey []byte)(fileLength int, err error) {
-	decryptionFileLength, err = ConstructKey("encryption key for the file length", "could not create encryption key for the file length", protectedFileKey)
+func RecoverFileLength(protectedFileLength []byte, protectedFileKey []byte) (fileLength int, err error) {
+	decryptionFileLength, err := ConstructKey("encryption key for the file length", "could not create encryption key for the file length", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	macFileLength, err = ConstructKey("mac Key for the file length", "could not create mac key for the file length", protectedFileKey)
+	macFileLength, err := ConstructKey("mac Key for the file length", "could not create mac key for the file length", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	byteFileLength, err := CheckAndDecrypt(protectedFileLength, macFileLength, decryptionFileLength)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	var tempFileLength int
 	err = json.Unmarshal(byteFileLength, &tempFileLength)
 	if err != nil {
-		return nil, errors.Error("could not return the length of the file because of unmarshalling")
+		return 0, errors.New("could not return the length of the file because of unmarshalling")
 	}
 	fileLength = tempFileLength
 	return fileLength, nil
 }
-func RecoverFileUUID(protectedFileContentPtr []byte, protectedFileKey []byte)(fileUUID uuid.UUID, err error) {
+func RecoverFileContentUUID(protectedFileContentPtr []byte, protectedFileKey []byte) (fileUUID uuid.UUID, err error) {
 	decryptionContentPtr, err := ConstructKey("encryption for content pointer start", "could not create an encryption key for the content pointer", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, err
 	}
 	macContentPtr, err := ConstructKey("Mac key for content pointer start", "could not create a mac key for the content pointer", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, err
 	}
-	byteFileUUID, err = CheckAndDecrypt(protectedFileContentPtr, macContentPtr, decryptionContentPtr)
+	byteFileUUID, err := CheckAndDecrypt(protectedFileContentPtr, macContentPtr, decryptionContentPtr)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, err
 	}
 	var tempFileUUID uuid.UUID
 	err = json.Unmarshal(byteFileUUID, &tempFileUUID)
 	if err != nil {
-		return nil, errors.New("could not retreive file uuid because of unmarshalling")
+		return uuid.Nil, errors.New("could not retreive file uuid because of unmarshalling")
 	}
 	fileUUID = tempFileUUID
 	return fileUUID, nil
 }
+
+/*--------Helper Function to Fill File Content --------*/
+func generateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.UUID, err error) {
+	//shouldn't matter what int data type as long as its 128 bits
+	// block size of 64
+
+	byteCurrentUUID, err := json.Marshal(contentStart)
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert UUID to the byte UUID")
+	}
+	var intUUID int64
+	err = json.Unmarshal(byteCurrentUUID, intUUID)
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert byte UUID to an int")
+	}
+	intUUID += blockNumber
+	byteAddUUID, err := json.Marshal(intUUID)
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert the uuid back to bytes")
+	}
+	var newUUID uuid.UUID
+	err = json.Unmarshal(byteAddUUID, &newUUID)
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert to uuid")
+	}
+	return newUUID, nil
+}
+func fileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
+	//64 block size
+	tracker := 0
+	currentUUID := contentStart
+	if fileLength%64 == 0 {
+		tracker = 1
+	} else {
+		tracker = 0
+	}
+	for tracker <= fileLength/64 {
+		contentSplice := content[tracker : tracker+64]
+
+		var contentBlock FileContent
+		hardCodedText := "content encryption salt" + strconv.Itoa(tracker)
+		encryptionContentKey, err := ConstructKey(hardCodedText, "could not encrypt content block", fileKey)
+		if err != nil {
+			return err
+		}
+		hardCodedText = "content MAC salt" + strconv.Itoa(tracker)
+		macContentKey, err := ConstructKey(hardCodedText, "could not MAC content block", fileKey)
+		if err != nil {
+			return err
+		}
+		protectedContent, err := EncThenMac(encryptionContentKey, macContentKey, contentSplice)
+		if err != nil {
+			return err
+		}
+		contentBlock.BlockEncrypted = protectedContent
+
+		bytesContentBlock, err := json.Marshal(contentBlock)
+		if err != nil {
+			return errors.New("could not marshal content struct")
+		}
+
+		hardCodedText = "content struct encryption salt" + strconv.Itoa(tracker)
+		encryptionContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
+		if err != nil {
+			return err
+		}
+		hardCodedText = "content struct mac salt" + strconv.Itoa(tracker)
+		macConstentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
+		if err != nil {
+			return err
+		}
+		protectedContentStruct, err := EncThenMac(encryptionContentStructKey, macConstentStructKey, bytesContentBlock)
+		if err != nil {
+			return err
+		}
+		userlib.DatastoreSet(currentUUID, protectedContentStruct)
+		tracker += 1
+
+	}
+	return nil
+}
+func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.UUID) (err error) {
+	//new file length is shorter than old file length
+	longerFile := oldFileLength / 64
+	shorterFile := newFileLength / 64
+	for longerFile > shorterFile {
+		deletableUUID, err := generateNextUUID(ptrStart, longerFile)
+		if err != nil {
+			return err
+		}
+		userlib.DatastoreDelete(deletableUUID)
+	}
+	return nil
+}
+func ReplaceFileThroughCC(content []byte, protectedCCA []byte, cCAprotectedKey []byte) (err error) {
+	fileKey, fileUUID, _, err := RecoverOwnerCCContents(protectedCCA, cCAprotectedKey)
+	if err != nil {
+		return err
+	}
+	byteFile, ok := userlib.DatastoreGet(fileUUID)
+	if !ok {
+		return errors.New("file does not exist in datastore")
+	}
+	frontPtr, fileLength, err := RecoverFileContents(byteFile, fileKey)
+	if err != nil {
+		return err
+	}
+	//divide len into blocks
+	if int64(len(content)/64) > int64(fileLength/64) {
+		err = fileContentFilling(fileKey, frontPtr, fileLength, content)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = RestoreSmallerFile(int64(len(content)/64), int64(fileLength/64), frontPtr)
+		if err != nil {
+			return err
+		}
+	}
+}
+
 /* ----------- END Helper Functions ---------*/
 /* ----------- Fill Section Functions -------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
@@ -890,17 +1018,17 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 
 	return &newUser, nil
 }
-func storeNewFile(content []byte, cCAprotectedKey []byte ) (err error){
-/*
-	type File struct {
-	FileLength       []byte //uint --> marshal --> enc with File key hashKDF filelength
-	FileContentFront []byte //uuid of the front filecontent struct --> marshal --> enc with File key hashKDF filecontentFront
-}
-type FileContent struct {
-	BlockEncrypted []byte //string --> marshal --> enc with file key hashkdf UUID + current block
-}
-*/
-	startingSharedWith = []byte //marshal encrypted and mac usernames of the people I have shared with 
+func storeNewFile(content []byte, cCAprotectedKey []byte) (err error) {
+	/*
+	   	type File struct {
+	   	FileLength       []byte //uint --> marshal --> enc with File key hashKDF filelength
+	   	FileContentFront []byte //uuid of the front filecontent struct --> marshal --> enc with File key hashKDF filecontentFront
+	   }
+	   type FileContent struct {
+	   	BlockEncrypted []byte //string --> marshal --> enc with file key hashkdf UUID + current block
+	   }
+	*/
+	startingSharedWith = []byte //marshal encrypted and mac usernames of the people I have shared with
 	protectedOwnerCCStruct, err = ProtectOwnerCC(startingSharedWith, cCAprotectedKey)
 	if err != nil {
 		return err
@@ -909,32 +1037,12 @@ type FileContent struct {
 	if err != nil {
 		return err
 	}
-	
-}
 
-func putContentIntoExistingFile(cCAprotectedKey []byte, protectedCCA []byte)(err error) {
-
-	cCaEncryptionKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CCA struct", cCAprotectedKey)
-	if err != nil {
-		return err
-	}
-	cCaMacKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CCA struct", cCAprotectedKey)
-	if err != nil {
-		return err
-	}
-	ByteCCAAddress, err := CheckAndDecrypt(protectedCCA, cCaMacKey, cCaEncryptionKey)
-	if err != nil {
-		return false, err
-	}
-	var cca struct
-	err = json.Unmarshal(ByteCCAAdress, &cca)
-	if err != nil {
-		return errors.New("could not unmarshal struct")
-	}
-	return nil
 }
+func restoreFile()
+
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	//check if filename exists in my name space 
+	//check if filename exists in my name space
 	cCAprotectedKey, protectedFilename, err := newFile(filename, userdata.hashedPasswordKDF, userdata.username) //might not need the protected file name
 	if err != nil {
 		return err
@@ -943,52 +1051,46 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
+	//finds whether the communications channel or accept with uuid exists
 	protectedCCA, err := GetCCorA(uuidOfCCorA)
 	if err != nil {
 		storeNewFile()
 		//create new set of structs
 	}
+	//checks if user owns existing file
 	ownsExistingFile, err := IsCC(uuidOfCCA, protectedCCA, cCAprotectedKey)
 	if err != nil {
 		return err
 	}
+	//modify the existing file through communication channel
 	if ownsExistingFile {
-		fileKey, fileUUID, sharedWith, err := RecoverOwnerCCContents(protectedCCA, cCAprotectedKey)
+
+	} else {
+		//modify the existing file through the accept struct
+		acceptStruct, err := userlib.DatastoreGet(uuidOfCCA)
+		if err != nil {
+			return err
+		}
+		fileKey, fileUUID, sharedWith, err := RecoverOwnerCCContents(acceptStruct.CommsChannel, cCAprotectedKey)
 		if err != nil {
 			return err
 		}
 		byteFile, ok := userlib.DatastoreGet(fileUUID)
-		if !ok  {
+		if !ok {
 			return errors.New("file does not exist in datastore")
 		}
-		fileLength := RecoverFileLength(byteFile.FileLength)
-		ffileContents := Recover
-		//datastore get file uuid --> bytes. can get file length & contents
-	} else {
-		acceptedPtr, err := RegenerateA(protectedCCA, ccaMacKey, ccaEncryptionKey)
+		frontPtr, fileLength, err := RecoverFileContents(byteFile, fileKey)
 		if err != nil {
 			return err
 		}
-		communicationChannelPtr := acceptedPtr.CommsChannel
+		if len(content) > fileLength {
+			//err := restorelargerfile(file, content)
+		} else {
+			//err := restoresmallerfile(file, content)
+			//datastore.delete(excess)
+		}
+
 	}
-	
-	restoreNewFile(cCAprotectedKey, protectedCCA)
-	//exists go into all the other structs to restore the file
-
-	// if file name exists --> get the struct 
-
-	// if file name does not exist --> create a new struct for the communications channel --> new struct for file --> file content
-	/*var communicationChannel CommunicationsChannel	
-	var file File
-	var fileContent FileContent
-	
-	type CommunicationsChannel struct {
-	Owner      bool   //value for owner to know they are owner 1 means they are owner 0 if they are not the owner
-	FileKey    []byte //randomly generated key which will change in revocation
-	FileStruct []byte //randomly generated UUID which will change in revocation
-	SharedWith []byte //recipients Username
-}
-	*/
 }
 
 func (userdata *User) AppendToFile(filename string, content []byte) error {
@@ -1026,4 +1128,3 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 }
 
 /* ----------- END Fill Section Functions -------*/
-i
