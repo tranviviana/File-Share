@@ -976,11 +976,11 @@ func ProtectAccepted(protectedAcceptedKey []byte, locationAcceptedStruct uuid.UU
 	if err != nil {
 		return errors.New("could not marshal the Accepted struct")
 	}
-	encryptionAcceptedStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", protectedAcceptedKey)
+	encryptionAcceptedStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the Accepted struct", protectedAcceptedKey)
 	if err != nil {
 		return err
 	}
-	macAcceptedStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", protectedAcceptedKey)
+	macAcceptedStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the Accepted struct", protectedAcceptedKey)
 	if err != nil {
 		return err
 	}
@@ -996,51 +996,80 @@ func ProtectAccepted(protectedAcceptedKey []byte, locationAcceptedStruct uuid.UU
 /* ----------- Decrypting Your Accepted Struct ----------- */
 
 func RecoverAcceptedStructContents(protectedA []byte, protectedAcceptedKey []byte) (commsKey []byte, commsChannel uuid.UUID, err error) {
+	decryptionAcceptedStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the Accepted struct", protectedAcceptedKey)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	macAcceptedStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the Accepted struct", protectedAcceptedKey)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	byteAcceptedStruct, err := CheckAndDecrypt(protectedA, macAcceptedStruct, decryptionAcceptedStruct)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	var acceptedStruct Accepted
+	err = json.Unmarshal(byteAcceptedStruct, &acceptedStruct)
+	if err != nil {
+		return nil, uuid.Nil, errors.New("could not unmarshal the Accepted struct")
+	}
+	protectedCommsChannel := acceptedStruct.CommsChannel
+	protectedCommsKey := acceptedStruct.CommsKey
 
-}
-func RecoverCommsKey(protectedCommsKey []byte, protectedA []byte) (commsKey []byte, err error) {
-
+	commsChannel, err = RecoverCommsChannel(protectedCommsChannel, protectedA)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	commsKey, err = RecoverCommsKey(protectedCommsKey, protectedA)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	return commsKey, commsChannel, nil
 }
 func RecoverCommsChannel(protectedCommsChannel []byte, protectedA []byte) (commsChannel uuid.UUID, err error) {
-	decryptionFileLength, err := ConstructKey("encryption key for the file length", "could not create encryption key for the file length", protectedFileKey)
+	decryptionCommsChannel, err := ConstructKey("encryption for CommsChannel in Accepted struct", "could not create encryption key for CommsChannel in Accepted struct", protectedA)
 	if err != nil {
-		return 0, err
+		return uuid.Nil, err
 	}
-	macFileLength, err := ConstructKey("mac Key for the file length", "could not create mac key for the file length", protectedFileKey)
+	macCommsChannel, err := ConstructKey("mac for CommsChannel in Accepted struct", "could not create mac key for CommsChannel in Accepted struct", protectedA)
 	if err != nil {
-		return 0, err
+		return uuid.Nil, err
 	}
-	byteFileLength, err := CheckAndDecrypt(protectedFileLength, macFileLength, decryptionFileLength)
+	byteCommsChannel, err := CheckAndDecrypt(protectedCommsChannel, macCommsChannel, decryptionCommsChannel)
 	if err != nil {
-		return 0, err
+		return uuid.Nil, err
 	}
-	var tempFileLength int
-	err = json.Unmarshal(byteFileLength, &tempFileLength)
-	if err != nil {
-		return 0, errors.New("could not return the length of the file because of unmarshalling")
-	}
-	fileLength = tempFileLength
-	return fileLength, nil
-}
 
-/*
-func RegenerateA(protectedA []byte, AMacKey []byte, ADecryptKey []byte) (acceptedInvitePtr *Accepted, err error) {
-	byteA, err := CheckAndDecrypt(protectedA, AMacKey, ADecryptKey)
+	err = json.Unmarshal(byteCommsChannel, &commsChannel)
+	if err != nil {
+		return uuid.Nil, errors.New("could not unmarshal commschannel")
+	}
+	return commsChannel, nil
+}
+func RecoverCommsKey(protectedCommsKey []byte, protectedA []byte) (commsKey []byte, err error) {
+	decryptionCommsKey, err := ConstructKey("encryption for CommsKey in Accepted struct", "could not create encryption key for CommsKey in Accepted struct", protectedA)
 	if err != nil {
 		return nil, err
 	}
-	var acceptedPtr *Accepted
-	err = json.Unmarshal(byteA, &acceptedPtr)
+	macCommsKey, err := ConstructKey("mac for CommsKey in Accepted struct", "could not create mac key for CommsKey in Accepted struct", protectedA)
 	if err != nil {
-		return nil, errors.New("could not unmarshal accepted")
+		return nil, err
 	}
-	return acceptedPtr, nil
+	byteCommsKey, err := CheckAndDecrypt(protectedCommsKey, macCommsKey, decryptionCommsKey)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(byteCommsKey, &commsKey)
+	if err != nil {
+		return nil, errors.New("could not unmarshal commschannel")
+	}
+	return commsKey, nil
 }
-*/
 
 /* -----------END Decrypting Your Accepted Struct ----------- */
 
-/* ----------- Fill Section Functions -------*/
+/* ----------- User Functions -------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
 	//creates user if they don't alr
 	//checks username length minimum
