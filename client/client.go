@@ -15,13 +15,10 @@ import (
 	"strings"
 
 	// Useful for formatting strings (e.g. `fmt.Sprintf`).
-	//"fmt"
+	"fmt"
 
 	// Useful for creating new error messages to return using errors.New("...")
 	"errors"
-
-	// Optional.
-	_ "strconv"
 )
 
 /*------------ Struct Section -------------*/
@@ -86,12 +83,14 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEn
 func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 	//ensures integrity by checking the mac tag at the front of the protected object
 	//check the size of inputs
+	fmt.Printf(strconv.Itoa(len(protectedObject)))
 	if len(protectedObject) < 64 {
 		return false, errors.New("protected object is too small")
 	}
 	if len(macKey) < 16 {
 		return false, errors.New("macKey is too small")
 	}
+	fmt.Printf(strconv.Itoa(len(protectedObject)))
 	//slice the protected object in the mac tag and encrypted object
 	macTag := protectedObject[:64]
 	encryptedObject := protectedObject[64:]
@@ -105,10 +104,14 @@ func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 		return false, errors.New("INTEGRITY ERROR")
 	}
 	return ok, nil
+}
 
 func Decrypt(protectedObject []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
 	//decrypts the object using the key
 	//check length minimum
+	if len(protectedObject) < 64 {
+		return nil, errors.New("protected object is too small")
+	}
 	encryptedObject := protectedObject[64:]
 	if len(encryptedObject) < userlib.AESBlockSizeBytes {
 		return nil, errors.New("object length is too short to decrypt")
@@ -355,6 +358,9 @@ func RegenerateUUIDCCA(cCAprotectedKey []byte) (CCAuuid uuid.UUID, err error) {
 	//get the uuid of the communication channel OR acceptance struct depending on if owner OR sharer respectively -- from a protected argon2key
 	//hash the protected key
 	hardCodedText, err := json.Marshal("UUID key to hash with protected key for cc and a struct")
+	if err != nil {
+		return uuid.Nil, errors.New("could not marshal text")
+	}
 	ccaUUIDkey, err := userlib.HashKDF(cCAprotectedKey, hardCodedText[:16])
 	if err != nil {
 		return uuid.Nil, errors.New("could not hashkdf the protected key for CC or A structs")
@@ -797,7 +803,7 @@ func generateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.
 		return uuid.Nil, errors.New("could not convert UUID to the byte UUID")
 	}
 	var intUUID int64
-	err = json.Unmarshal(byteCurrentUUID, intUUID)
+	err = json.Unmarshal(byteCurrentUUID, &intUUID)
 	if err != nil {
 		return uuid.Nil, errors.New("could not convert byte UUID to an int")
 	}
@@ -880,9 +886,9 @@ func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.
 	}
 	return nil
 }
-func ReplaceFileThroughCC(content []byte, protectedCCA []byte, cCAprotectedKey []byte) (err error) {
+func ReplaceFileThroughCC(content []byte, protectedCC []byte, CCprotectedKey []byte) (err error) {
 	//used in store file if the file exists
-	fileKey, fileUUID, _, err := RecoverOwnerCCContents(protectedCCA, cCAprotectedKey)
+	fileKey, fileUUID, _, err := RecoverOwnerCCContents(protectedCC, CCprotectedKey)
 	if err != nil {
 		return err
 	}
@@ -1177,13 +1183,13 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 // 4) func IsCC(CCAuuid uuid.UUID, protectedCCA []byte, cCAprotectedKey []byte) checks if its a communications or a channel
 // 5) if it is an accepted channel then use the decryption of the accepted ones
 func (userdata *User) StoreFile(filename string, content []byte) (err error) {
-	cCAProtectedKey, protectedFilename, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
+	cCAProtectedKey, _, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
 	if err != nil {
 		return err
 	}
 	cCAUUID, err := RegenerateUUIDCCA(cCAProtectedKey)
 	if err != nil {
-		return nil
+		return err
 	}
 	//Check data store if the filename exists in our name space
 	protectedCCA, exists := GetCCorA(cCAUUID)
@@ -1192,8 +1198,25 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		owner, err := IsCC(protectedCCA, cCAProtectedKey)
 		if owner && err == nil {
 			// you are the owner --> communications channel
+			err = ReplaceFileThroughCC(content, protectedCCA, cCAProtectedKey)
+			if err != nil {
+				return err
+			}
 		} else if !owner && err == nil {
 			// you are not the owner --> accepted channel
+			commsKey, commsChannel, err := RecoverAcceptedStructContents(protectedCCA, cCAProtectedKey)
+			if err != nil {
+				return err
+			}
+			var protectedCC []byte
+			protectedCC, err = json.Marshal(commsChannel)
+			if err != nil {
+				return err
+			}
+			err = ReplaceFileThroughCC(content, protectedCC, commsKey)
+			if err != nil {
+				return err
+			}
 		} else {
 			return err
 		}
