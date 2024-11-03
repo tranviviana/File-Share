@@ -993,7 +993,6 @@ func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.
 }
 func fileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
 	//64 block size
-	tracker := 0
 	currentUUID := contentStart
 	var roundsEncryption int
 	if fileLength%64 == 0 {
@@ -1450,17 +1449,6 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 }
 
 func (userdata *User) LoadFile(filename string) (content []byte, err error) {
-	/*storageKey, err := uuid.FromBytes(userlib.Hash([]byte(filename + string(userdata.username)))[:16])
-
-	if err != nil {
-		return nil, err
-	}
-	dataJSON, ok := userlib.DatastoreGet(storageKey)
-	if !ok {
-		return nil, errors.New(strings.ToTitle("file not found"))
-	}
-	err = json.Unmarshal(dataJSON, &content)*/
-
 	cCAProtectedKey, _, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
 	if err != nil {
 		return nil, err
