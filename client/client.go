@@ -4,7 +4,6 @@ package client
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"strings"
@@ -78,14 +77,12 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEn
 func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 	//ensures integrity by checking the mac tag at the front of the protected object
 	//check the size of inputs
-	fmt.Printf(strconv.Itoa(len(protectedObject)))
 	if len(protectedObject) < 64 {
 		return false, errors.New("protected object is too small")
 	}
 	if len(macKey) < 16 {
 		return false, errors.New("macKey is too small")
 	}
-	fmt.Printf(strconv.Itoa(len(protectedObject)))
 	//slice the protected object in the mac tag and encrypted object
 	macTag := protectedObject[:64]
 	encryptedObject := protectedObject[64:]
@@ -103,9 +100,6 @@ func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 func Decrypt(protectedObject []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
 	//decrypts the object using the key
 	//check length minimum
-	if len(protectedObject) < 64 {
-		return nil, errors.New("protected object is too small")
-	}
 	encryptedObject := protectedObject[64:]
 	if len(encryptedObject) < userlib.AESBlockSizeBytes {
 		return nil, errors.New("object length is too short to decrypt")
