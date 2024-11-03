@@ -66,6 +66,9 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEn
 	if err != nil {
 		return nil, errors.New("could not generate MAC tag over hidden object")
 	}
+	if len(tagEncryptedObject) != 64 {
+		return nil, errors.New("tag not size 64")
+	}
 	//full encrypted and mac tagged RSA private key
 	macEncryptedObject = append(tagEncryptedObject, encryptedObject...)
 	return macEncryptedObject, nil
@@ -983,7 +986,7 @@ func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.
 	}
 	return nextUUID, nil
 }
-func FileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
+func SetFileContent(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
 	//64 block size
 	currentUUID := contentStart
 	var roundsEncryption int
@@ -1028,11 +1031,11 @@ func FileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, 
 			return err
 		}
 		hardCodedText = "content struct mac salt" + strconv.Itoa(currentRound)
-		macConstentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
+		macContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return err
 		}
-		protectedContentStruct, err := EncThenMac(encryptionContentStructKey, macConstentStructKey, bytesContentBlock)
+		protectedContentStruct, err := EncThenMac(encryptionContentStructKey, macContentStructKey, bytesContentBlock)
 		if err != nil {
 			return err
 		}
@@ -1045,9 +1048,8 @@ func FileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, 
 	}
 	return nil
 }
-func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.UUID) (content []byte, err error) {
+func GetFileContent(fileKey []byte, fileLength int, fileContentFront uuid.UUID) (content []byte, err error) {
 	currentUUID := fileContentFront
-	totalContent := make([]byte, 0, fileLength) // Preallocate content storage
 
 	// Calculate the number of blocks needed
 	var roundsDecryption int
@@ -1066,46 +1068,65 @@ func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.
 		}
 
 		// Reconstruct encryption and MAC keys for this block
-		hardCodedText := "content encryption salt" + strconv.Itoa(currentRound)
-		encryptionContentKey, err := ConstructKey(hardCodedText, "could not reconstruct encrption key", fileKey)
+		hardCodedText := "content struct encryption salt" + strconv.Itoa(currentRound)
+		decryptionContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return nil, err
 		}
-		hardCodedText = "content MAC salt" + strconv.Itoa(currentRound)
-		macContentKey, err := ConstructKey(hardCodedText, "could not MAC content block", fileKey)
+		hardCodedText = "content struct mac salt" + strconv.Itoa(currentRound)
+		macContentStructKey, err := ConstructKey(hardCodedText, "could not create MAC key for content struct", fileKey)
 		if err != nil {
 			return nil, err
 		}
 
 		// Decrypt and authenticate block content
-		decryptedContent, err := CheckAndDecrypt(encryptedBlock, macContentKey, encryptionContentKey)
+		byteContentBlock, err := CheckAndDecrypt(encryptedBlock, macContentStructKey, decryptionContentStructKey)
 		if err != nil {
 			return nil, errors.New("decryption or MAC validation failed for file block")
 		}
 
 		// Unmarshal the content block
 		var contentBlock FileContent
-		if err := json.Unmarshal(decryptedContent, &contentBlock); err != nil {
+		err = json.Unmarshal(byteContentBlock, &contentBlock)
+		if err != nil {
 			return nil, errors.New("could not unmarshal file content block")
 		}
 
-		// Append decrypted block to total content
-		totalContent = append(totalContent, contentBlock.BlockEncrypted...)
+		// Generate encryption and MAC keys for the content itself
+		hardCodedText = "content encryption salt" + strconv.Itoa(currentRound)
+		decryptionContentKey, err := ConstructKey(hardCodedText, "could not create encryption key for content", fileKey)
+		if err != nil {
+			return nil, err
+		}
 
-		// Generate the next UUID
+		hardCodedText = "content MAC salt" + strconv.Itoa(currentRound)
+		macContentKey, err := ConstructKey(hardCodedText, "could not create MAC key for content", fileKey)
+		if err != nil {
+			return nil, err
+		}
+
+		// Verify and decrypt the actual file content
+		decryptedContent, err := CheckAndDecrypt(contentBlock.BlockEncrypted, macContentKey, decryptionContentKey)
+		if err != nil {
+			return nil, errors.New("GetFileContent: integrity check failed for file content")
+		}
+
+		// Append the decrypted content to the full content array
+		content = append(content, decryptedContent...)
+
+		// Generate the next UUID in the chain
 		currentUUID, err = GenerateNextUUID(fileContentFront, int64(currentRound+1))
 		if err != nil {
 			return nil, err
 		}
-		currentRound += 1
 	}
 
 	// Trim content to the actual file length (in case of padding in the last block)
-	if len(totalContent) > fileLength {
-		totalContent = totalContent[:fileLength]
+	if len(content) > fileLength {
+		content = content[:fileLength]
 	}
 
-	return totalContent, nil
+	return content, nil
 }
 
 func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.UUID) (err error) {
@@ -1393,7 +1414,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			}
 			//divide len into blocks
 			if int64(len(content)/64) > int64(fileLength/64) {
-				err = FileContentFilling(fileKey, frontPtr, fileLength, content)
+				err = SetFileContent(fileKey, frontPtr, fileLength, content)
 				if err != nil {
 					return err
 				}
@@ -1460,7 +1481,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			return err
 		}
 
-		err = FileContentFilling(fileKey, fileUUID, len(content), content)
+		err = SetFileContent(fileKey, fileUUID, len(content), content)
 		if err != nil {
 			return err
 		}
@@ -1513,7 +1534,7 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 			if err != nil {
 				return nil, err
 			}
-			content, err = FileContentRestoring(fileKey, fileLength, frontPtr)
+			content, err = GetFileContent(fileKey, fileLength, frontPtr)
 			if err != nil {
 				return nil, err
 			}
