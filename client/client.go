@@ -1055,8 +1055,63 @@ func fileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, 
 	return nil
 }
 func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.UUID) (content []byte, err error) {
-	return nil, nil
+	currentUUID := fileContentFront
+	totalContent := make([]byte, 0, fileLength) // Preallocate content storage
+
+	// Calculate the number of blocks needed
+	blockSize := 64
+	numBlocks := (fileLength + blockSize - 1) / blockSize // rounds up if not a multiple of blockSize
+
+	for i := 0; i < numBlocks; i++ {
+		// Retrieve encrypted block from datastore
+		encryptedBlock, exists := userlib.DatastoreGet(currentUUID)
+		if !exists {
+			return nil, errors.New("file block missing from datastore")
+		}
+
+		// Reconstruct encryption and MAC keys for this block
+		encryptionSalt := "content encryption salt" + strconv.Itoa(i)
+		encryptionKey, err := ConstructKey(encryptionSalt, "could not reconstruct encryption key", fileKey)
+		if err != nil {
+			return nil, err
+		}
+
+		macSalt := "content MAC salt" + strconv.Itoa(i)
+		macKey, err := ConstructKey(macSalt, "could not reconstruct MAC key", fileKey)
+		if err != nil {
+			return nil, err
+		}
+
+		// Decrypt and authenticate block content
+		decryptedContent, err := CheckAndDecrypt(encryptedBlock, macKey, encryptionKey)
+		if err != nil {
+			return nil, errors.New("decryption or MAC validation failed for file block")
+		}
+
+		// Unmarshal the content block
+		var contentBlock FileContent
+		if err := json.Unmarshal(decryptedContent, &contentBlock); err != nil {
+			return nil, errors.New("could not unmarshal file content block")
+		}
+
+		// Append decrypted block to total content
+		totalContent = append(totalContent, contentBlock.BlockEncrypted...)
+
+		// Generate the next UUID
+		currentUUID, err = GenerateNextUUID(fileContentFront, int64(i+1))
+		if err != nil {
+			return nil, errors.New("failed to generate next UUID")
+		}
+	}
+
+	// Trim content to the actual file length (in case of padding in the last block)
+	if len(totalContent) > fileLength {
+		totalContent = totalContent[:fileLength]
+	}
+
+	return totalContent, nil
 }
+
 func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.UUID) (err error) {
 	//new file length is shorter than old file length
 	longerFile := oldFileLength / 64
