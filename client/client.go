@@ -944,34 +944,42 @@ func RecoverFileContentUUID(protectedFileContentPtr []byte, protectedFileKey []b
 // then returns a new UUID based on the block number.
 func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.UUID, err error) {
 	if blockNumber < 0 {
-		return uuid.Nil, errors.New("block number must be non-negative")
+		return uuid.Nil, errors.New("GenerateNetUUID: block number must be non-negative")
 	}
 
-	// Create a byte slice from the UUID
+	// Create a length 16 byte slice from the UUID
 	uuidBytes := contentStart[:]
+	if len(uuidBytes) != 16 {
+		return uuid.Nil, errors.New("GenerateNetUUID: UUID size incorrect")
+	}
 
-	// Convert blockNumber to a byte slice using JSON
+	// Create length 16 bytes from blockNumber
 	blockBytes, err := json.Marshal(blockNumber)
 	if err != nil {
-		return uuid.Nil, errors.New("could not marshal block number")
+		return uuid.Nil, errors.New("GenerateNetUUID: could not marshal block number")
 	}
+	hardCodedText, err := json.Marshal("sourcekey to hash the blockNumber into a unique length 16 []byte")
+	if err != nil {
+		return uuid.Nil, errors.New("GenerateNetUUID: could not marshal text")
+	}
+	hashedBlockBytes, err := userlib.HashKDF(hardCodedText[:16], blockBytes)
+	if err != nil {
+		return uuid.Nil, errors.New("GenerateNetUUID: could not hash blockBytes")
+	}
+	if len(hashedBlockBytes) != 64 {
+		return uuid.Nil, errors.New("GenerateNetUUID: hashedBlockBytes incorrect size")
+	}
+	hashedBlockBytes = hashedBlockBytes[:16]
 
-	// Ensure we have the right length
-	if len(blockBytes) != 8 {
-		return uuid.Nil, errors.New("block number must fit in 8 bytes")
-	}
-	if len(uuidBytes) != 16 {
-		return uuid.Nil, errors.New("uuid must fit 16 bytes")
-	}
-	for i := 0; i < 8; i++ {
-		uuidBytes[15-i] ^= blockBytes[7-i]
-		uuidBytes[i] ^= blockBytes[i]
+	//xor uuid & block bytes
+	for i := 0; i < 16; i++ {
+		uuidBytes[15-i] ^= hashedBlockBytes[15-i]
 	}
 
 	// Return the new UUID
-	err = json.Unmarshal(uuidBytes, &nextUUID)
+	nextUUID, err = uuid.FromBytes(uuidBytes)
 	if err != nil {
-		return uuid.Nil, errors.New("could not unmarshal uuid bytes")
+		return uuid.Nil, errors.New("GenerateNetUUID: could not convert bytes to uuid")
 	}
 	return nextUUID, nil
 }
@@ -1028,9 +1036,12 @@ func FileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, 
 		if err != nil {
 			return err
 		}
+		currentUUID, err = GenerateNextUUID(contentStart, int64(currentRound+1))
+		if err != nil {
+			return err
+		}
 		userlib.DatastoreSet(currentUUID, protectedContentStruct)
 		currentRound += 1
-
 	}
 	return nil
 }
@@ -1084,7 +1095,7 @@ func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.
 		// Generate the next UUID
 		currentUUID, err = GenerateNextUUID(fileContentFront, int64(currentRound+1))
 		if err != nil {
-			return nil, errors.New("failed to generate next UUID")
+			return nil, err
 		}
 		currentRound += 1
 	}
