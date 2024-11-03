@@ -667,14 +667,7 @@ func RecoverCommsChannel(protectedCommsChannel []byte, protectedA []byte) (comms
 
 /*----END Helper Functions for RecoverAcceptStructContents-----*/
 /***------------------------------------------------------Step Two (for Active Recipients) In getting a file; Owner Creates Communication Nodes------------------------------***/
-/*
-type CommunicationsChannel struct {
-	FileKey    []byte //randomly generated key which will change in revocation
-	FileStruct []byte //randomly generated UUID which will change in revocation
-	SharedWith []byte //random bytes recipients Username and argon2Key
-}
-	//essentially the owner copies their communications struct into generated nodes
-*/
+
 func generateRecCCKey(recipientsUsername string, ownerUsername string, filename string, sharedWith []byte) (protectedRecKey []byte, recCCUUID uuid.UUID, err error) {
 	//recipient communicationschannel key owner is creating this file
 	//marshal owner & recipient & filename
@@ -967,21 +960,12 @@ func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.
 	if len(blockBytes) != 8 {
 		return uuid.Nil, errors.New("block number must fit in 8 bytes")
 	}
-
-	/* Add blockBytes to uuidBytes
-	for i := 0; i < 8; i++ {
-		uuidBytes[15-i] += blockBytes[7-i] // Start from the end of the UUID
-		if uuidBytes[15-i] < blockBytes[7-i] { // Handle carry
-			for j := 1; j <= i; j++ {
-				uuidBytes[15-i+j]++
-				if uuidBytes[15-i+j] != 0 {
-					break
-				}
-			}
-		}
-	}*/
+	if len(uuidBytes) != 16 {
+		return uuid.Nil, errors.New("uuid must fit 16 bytes")
+	}
 	for i := 0; i < 8; i++ {
 		uuidBytes[15-i] ^= blockBytes[7-i]
+		uuidBytes[i] ^= blockBytes[i]
 	}
 
 	// Return the new UUID
@@ -991,7 +975,7 @@ func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.
 	}
 	return nextUUID, nil
 }
-func fileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
+func FileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
 	//64 block size
 	currentUUID := contentStart
 	var roundsEncryption int
@@ -1009,12 +993,12 @@ func fileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, 
 			contentSplice = content[(currentRound * 64) : (currentRound+1)*64]
 		}
 		var contentBlock FileContent
-		hardCodedText := "content encryption salt" + strconv.Itoa(tracker)
+		hardCodedText := "content encryption salt" + strconv.Itoa(currentRound)
 		encryptionContentKey, err := ConstructKey(hardCodedText, "could not encrypt content block", fileKey)
 		if err != nil {
 			return err
 		}
-		hardCodedText = "content MAC salt" + strconv.Itoa(tracker)
+		hardCodedText = "content MAC salt" + strconv.Itoa(currentRound)
 		macContentKey, err := ConstructKey(hardCodedText, "could not MAC content block", fileKey)
 		if err != nil {
 			return err
@@ -1030,12 +1014,12 @@ func fileContentFilling(fileKey []byte, contentStart uuid.UUID, fileLength int, 
 			return errors.New("could not marshal content struct")
 		}
 
-		hardCodedText = "content struct encryption salt" + strconv.Itoa(tracker)
+		hardCodedText = "content struct encryption salt" + strconv.Itoa(currentRound)
 		encryptionContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return err
 		}
-		hardCodedText = "content struct mac salt" + strconv.Itoa(tracker)
+		hardCodedText = "content struct mac salt" + strconv.Itoa(currentRound)
 		macConstentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return err
@@ -1055,10 +1039,15 @@ func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.
 	totalContent := make([]byte, 0, fileLength) // Preallocate content storage
 
 	// Calculate the number of blocks needed
-	blockSize := 64
-	numBlocks := (fileLength + blockSize - 1) / blockSize // rounds up if not a multiple of blockSize
+	var roundsDecryption int
+	if fileLength%64 == 0 {
+		roundsDecryption = fileLength / 64
+	} else {
+		roundsDecryption = (fileLength / 64) + 1
+	}
+	currentRound := 0
 
-	for i := 0; i < numBlocks; i++ {
+	for currentRound < roundsDecryption {
 		// Retrieve encrypted block from datastore
 		encryptedBlock, exists := userlib.DatastoreGet(currentUUID)
 		if !exists {
@@ -1066,20 +1055,19 @@ func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.
 		}
 
 		// Reconstruct encryption and MAC keys for this block
-		encryptionSalt := "content encryption salt" + strconv.Itoa(i)
-		encryptionKey, err := ConstructKey(encryptionSalt, "could not reconstruct encryption key", fileKey)
+		hardCodedText := "content encryption salt" + strconv.Itoa(currentRound)
+		encryptionContentKey, err := ConstructKey(hardCodedText, "could not reconstruct encrption key", fileKey)
 		if err != nil {
 			return nil, err
 		}
-
-		macSalt := "content MAC salt" + strconv.Itoa(i)
-		macKey, err := ConstructKey(macSalt, "could not reconstruct MAC key", fileKey)
+		hardCodedText = "content MAC salt" + strconv.Itoa(currentRound)
+		macContentKey, err := ConstructKey(hardCodedText, "could not MAC content block", fileKey)
 		if err != nil {
 			return nil, err
 		}
 
 		// Decrypt and authenticate block content
-		decryptedContent, err := CheckAndDecrypt(encryptedBlock, macKey, encryptionKey)
+		decryptedContent, err := CheckAndDecrypt(encryptedBlock, macContentKey, encryptionContentKey)
 		if err != nil {
 			return nil, errors.New("decryption or MAC validation failed for file block")
 		}
@@ -1094,10 +1082,11 @@ func FileContentRestoring(fileKey []byte, fileLength int, fileContentFront uuid.
 		totalContent = append(totalContent, contentBlock.BlockEncrypted...)
 
 		// Generate the next UUID
-		currentUUID, err = GenerateNextUUID(fileContentFront, int64(i+1))
+		currentUUID, err = GenerateNextUUID(fileContentFront, int64(currentRound+1))
 		if err != nil {
 			return nil, errors.New("failed to generate next UUID")
 		}
+		currentRound += 1
 	}
 
 	// Trim content to the actual file length (in case of padding in the last block)
@@ -1393,7 +1382,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			}
 			//divide len into blocks
 			if int64(len(content)/64) > int64(fileLength/64) {
-				err = fileContentFilling(fileKey, frontPtr, fileLength, content)
+				err = FileContentFilling(fileKey, frontPtr, fileLength, content)
 				if err != nil {
 					return err
 				}
@@ -1406,10 +1395,43 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			return nil
 		}
 		if !owner && err == nil {
-			/*if shared user , go through acceptedstruct  and  communicationschannel*/
-			return nil
-		} else {
-			return err
+			/*
+					//if shared user , go through acceptedstruct  and  communicationschannel
+					protectedA, protectedAcceptedKey := protectedCCA, cCAProtectedKey
+					commsKey, commsChannelUUID, err := RecoverAcceptedStructContents(protectedA, protectedAcceptedKey)
+					if err != nil {
+						return err
+					}
+					byteCommsChannel, ok := userlib.DatastoreGet(commsChannelUUID)
+					if !ok {
+						return errors.New("could not retrieve communications channel")
+					}
+					var commsChannel CommunicationsChannel
+					err = json.Unmarshal(byteCommsChannel, &commsChannel)
+					var file File
+					err = json.Unmarshal(commsChannel.FileStruct, &file)
+					if err != nil {
+						return errors.New("could not unmarshal")
+					}
+					frontPointer, fileContent, err := RecoverFileContents(file, commsChannel.FileKey)
+					if err != nil {
+						return errors.New("could not unmarshal")
+					}
+
+					if int64(len(content)/64) > int64(file.FileLength/64) {
+						err = fileContentFilling(commsChannel.FileKey, frontPointer, file length?, content)
+						if err != nil {
+							return err
+						}
+					} else {
+						err = RestoreSmallerFile(int64(len(content)/64), int64(fileLength/64), frontPtr)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				} else {
+					return err */
 		}
 
 	} else {
@@ -1427,7 +1449,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			return err
 		}
 
-		err = fileContentFilling(fileKey, fileUUID, len(content), content)
+		err = FileContentFilling(fileKey, fileUUID, len(content), content)
 		if err != nil {
 			return err
 		}
@@ -1439,7 +1461,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	return nil
 }
 
-func (userdata *User) AppendToFile(filename string, content []byte) error {
+func (userdata *User) AppendToFile(filename string, content []byte) (err error) {
 	/*byteFilename, err := json.Marshal(filename)
 	if err != nil{
 		return errors.New("could not marshal filename")
@@ -1459,37 +1481,35 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 	}
 	//Check data store if the filename exists in our name space
 	protectedCCA, exists := GetCCorA(cCAUUID)
+
 	if exists {
 		// the file name is in the person name space (need to overwrite)
 		owner, err := IsCC(protectedCCA, cCAProtectedKey)
 		var protectedCC []byte
 		var CCProtectedKey []byte
-		if err == nil {
-			if owner {
-				// you are the owner --> communications channel
-				protectedCC, CCProtectedKey = protectedCCA, cCAProtectedKey
-				fileKey, fileUUID, _, err := RecoverOwnerCCContents(protectedCC, CCProtectedKey)
-				if err != nil {
-					return nil, err
-				}
-				byteFile, ok := userlib.DatastoreGet(fileUUID)
-				if !ok {
-					return nil, errors.New("file does not exist in datastore")
-				}
-				frontPtr, fileLength, err := RecoverFileContents(byteFile, fileKey)
-				if err != nil {
-					return nil, err
-				}
-
-				fileContent, err := FileContentRestoring(fileKey, fileLength, frontPtr)
-				if err != nil {
-					return nil, err
-				}
-				return fileContent, nil
+		if owner && err == nil {
+			// you are the owner --> communications channel
+			protectedCC, CCProtectedKey = protectedCCA, cCAProtectedKey
+			fileKey, fileUUID, _, err := RecoverOwnerCCContents(protectedCC, CCProtectedKey)
+			if err != nil {
+				return nil, err
 			}
-			if !owner {
-				return nil, nil
+			byteFile, ok := userlib.DatastoreGet(fileUUID)
+			if !ok {
+				return nil, errors.New("file does not exist in datastore")
 			}
+			frontPtr, fileLength, err := RecoverFileContents(byteFile, fileKey)
+			if err != nil {
+				return nil, err
+			}
+			content, err = FileContentRestoring(fileKey, fileLength, frontPtr)
+			if err != nil {
+				return nil, err
+			}
+			return content, nil
+		}
+		if !owner && err == nil {
+			return nil, nil
 		}
 		return nil, errors.New("possible issue in isCC")
 	}
