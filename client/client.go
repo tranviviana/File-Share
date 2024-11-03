@@ -4,7 +4,6 @@ package client
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 
 	userlib "github.com/cs161-staff/project2-userlib"
@@ -74,14 +73,12 @@ func EncThenMac(encryptionKey []byte, macKey []byte, objectHidden []byte) (macEn
 func CheckMac(protectedObject []byte, macKey []byte) (ok bool, err error) {
 	//ensures integrity by checking the mac tag at the front of the protected object
 	//check the size of inputs
-	fmt.Printf(strconv.Itoa(len(protectedObject)))
 	if len(protectedObject) < 64 {
 		return false, errors.New("protected object is too small")
 	}
 	if len(macKey) < 16 {
 		return false, errors.New("macKey is too small")
 	}
-	fmt.Printf(strconv.Itoa(len(protectedObject)))
 	//slice the protected object in the mac tag and encrypted object
 	macTag := protectedObject[:64]
 	encryptedObject := protectedObject[64:]
@@ -1374,6 +1371,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	}
 	//Check data store if the filename exists in our name space
 	protectedCCA, exists := GetCCorA(cCAUUID)
+
 	if exists {
 		// the file name is in the person name space (need to overwrite)
 		owner, err := IsCC(protectedCCA, cCAProtectedKey)
@@ -1478,7 +1476,7 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 		owner, err := IsCC(protectedCCA, cCAProtectedKey)
 		var protectedCC []byte
 		var CCProtectedKey []byte
-		if err != nil {
+		if err == nil {
 			if owner {
 				// you are the owner --> communications channel
 				protectedCC, CCProtectedKey = protectedCCA, cCAProtectedKey
@@ -1502,7 +1500,7 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 				return fileContent, nil
 			}
 			if !owner {
-				//
+				return nil, nil
 			}
 		}
 		return nil, errors.New("possible issue in isCC")
