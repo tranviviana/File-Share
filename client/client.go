@@ -40,6 +40,7 @@ type FileContent struct {
 }
 
 /* ----------- END Struct Section -----------*/
+
 /*------------ Helper Functions -------------*/
 /***------------------------------------------------------ General Helper Functions ------------------------------***/
 func ConstructKey(hardCodedText string, errorMessage string, protectedKey []byte) (key []byte, err error) {
@@ -111,7 +112,7 @@ func Decrypt(protectedObject []byte, decryptionKey []byte) (decryptedObject []by
 	decryptedObject = userlib.SymDec(decryptionKey, encryptedObject)
 	return decryptedObject, nil
 }
-func CheckAndDecrypt(protectedObject []byte, macKey []byte, decryptionKey []byte) (decryptedObject []byte, err error) {
+func CheckAndDecrypt(decryptionKey []byte, macKey []byte, protectedObject []byte) (decryptedObject []byte, err error) {
 	//checks integrity and decrypts the object with the key
 	ok, err := CheckMac(protectedObject, macKey)
 	if !ok {
@@ -425,7 +426,7 @@ func IsCC(protectedCCA []byte, cCAprotectedKey []byte) (owner bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	ByteCCAAddress, err := CheckAndDecrypt(protectedCCA, cCaMacKey, cCaEncryptionKey)
+	ByteCCAAddress, err := CheckAndDecrypt(cCaEncryptionKey, cCaMacKey, protectedCCA)
 	if err != nil {
 		return false, err
 	}
@@ -574,7 +575,7 @@ func GetCommunicationsChannel(protectedOwnerCC []byte, cCAprotectedKey []byte) (
 
 /*--------Helper functions for GetCommunicationsChannel  ------------- */
 func RegenerateCC(protectedCC []byte, CCMacKey []byte, CCDecryptKey []byte) (ccPtr *CommunicationsChannel, err error) {
-	byteCC, err := CheckAndDecrypt(protectedCC, CCMacKey, CCDecryptKey)
+	byteCC, err := CheckAndDecrypt(CCDecryptKey, CCMacKey, protectedCC)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +596,7 @@ func RecoverSharedWith(protectedSharedWith []byte, cCAprotectedKey []byte) (shar
 	if err != nil {
 		return nil, err
 	}
-	sharedWith, err = CheckAndDecrypt(protectedSharedWith, macSharedWith, decryptionShareWith)
+	sharedWith, err = CheckAndDecrypt(decryptionShareWith, macSharedWith, protectedSharedWith)
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +613,7 @@ func RecoverFileKey(protectedFileKey []byte, cCAprotectedKey []byte) (fileKey []
 	if err != nil {
 		return nil, err
 	}
-	fileKey, err = CheckAndDecrypt(protectedFileKey, testMacFileKey, testEncryptionFileKey)
+	fileKey, err = CheckAndDecrypt(testEncryptionFileKey, testMacFileKey, protectedFileKey)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +630,7 @@ func RecoverFileUUID(protectedFileUUID []byte, cCAprotectedKey []byte) (fileUUID
 	if err != nil {
 		return uuid.Nil, err
 	}
-	byteFileUUID, err := CheckAndDecrypt(protectedFileUUID, macFileUUID, decryptionFileUUID)
+	byteFileUUID, err := CheckAndDecrypt(decryptionFileUUID, macFileUUID, protectedFileUUID)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -655,7 +656,7 @@ func RecoverCommsChannel(protectedCommsChannel []byte, protectedA []byte) (comms
 	if err != nil {
 		return uuid.Nil, err
 	}
-	byteCommsChannel, err := CheckAndDecrypt(protectedCommsChannel, macCommsChannel, decryptionCommsChannel)
+	byteCommsChannel, err := CheckAndDecrypt(decryptionCommsChannel, macCommsChannel, protectedCommsChannel)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -831,7 +832,7 @@ func GetFile(protectedFileStruct []byte, protectedFileKey []byte) (fileContentFr
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
-	byteFileStruct, err := CheckAndDecrypt(protectedFileStruct, macFileStruct, decryptionFileStruct)
+	byteFileStruct, err := CheckAndDecrypt(decryptionFileStruct, macFileStruct, protectedFileStruct)
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
@@ -864,7 +865,7 @@ func RecoverFileLength(protectedFileLength []byte, protectedFileKey []byte) (fil
 	if err != nil {
 		return 0, err
 	}
-	byteFileLength, err := CheckAndDecrypt(protectedFileLength, macFileLength, decryptionFileLength)
+	byteFileLength, err := CheckAndDecrypt(decryptionFileLength, macFileLength, protectedFileLength)
 	if err != nil {
 		return 0, err
 	}
@@ -885,7 +886,7 @@ func RecoverContentUUID(protectedFileContentPtr []byte, protectedFileKey []byte)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	byteContentUUID, err := CheckAndDecrypt(protectedFileContentPtr, macContentPtr, decryptionContentPtr)
+	byteContentUUID, err := CheckAndDecrypt(decryptionContentPtr, macContentPtr, protectedFileContentPtr)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -1038,7 +1039,7 @@ func GetFileContent(fileKey []byte, fileLength int, fileContentFront uuid.UUID) 
 		}
 
 		// Decrypt and authenticate block content
-		byteContentBlock, err := CheckAndDecrypt(encryptedBlock, macContentStructKey, decryptionContentStructKey)
+		byteContentBlock, err := CheckAndDecrypt(decryptionContentStructKey, macContentStructKey, encryptedBlock)
 		if err != nil {
 			return nil, errors.New("decryption or MAC validation failed for file block")
 		}
@@ -1064,7 +1065,7 @@ func GetFileContent(fileKey []byte, fileLength int, fileContentFront uuid.UUID) 
 		}
 
 		// Verify and decrypt the actual file content
-		decryptedContent, err := CheckAndDecrypt(contentBlock.BlockEncrypted, macContentKey, decryptionContentKey)
+		decryptedContent, err := CheckAndDecrypt(decryptionContentKey, macContentKey, contentBlock.BlockEncrypted)
 		if err != nil {
 			return nil, errors.New("GetFileContent: integrity check failed for file content")
 		}
@@ -1185,7 +1186,7 @@ func RecoverAcceptedStructContents(protectedA []byte, protectedAcceptedKey []byt
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	byteAcceptedStruct, err := CheckAndDecrypt(protectedA, macAcceptedStruct, decryptionAcceptedStruct)
+	byteAcceptedStruct, err := CheckAndDecrypt(decryptionAcceptedStruct, macAcceptedStruct, protectedA)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
@@ -1217,7 +1218,7 @@ func RecoverCommsKey(protectedCommsKey []byte, protectedA []byte) (commsKey []by
 	if err != nil {
 		return nil, err
 	}
-	byteCommsKey, err := CheckAndDecrypt(protectedCommsKey, macCommsKey, decryptionCommsKey)
+	byteCommsKey, err := CheckAndDecrypt(decryptionCommsKey, macCommsKey, protectedCommsKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1314,7 +1315,7 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	if err != nil {
 		return nil, err
 	}
-	byteUser, err := CheckAndDecrypt(protectedStruct, testStructMacKey, testDecryptionKey)
+	byteUser, err := CheckAndDecrypt(testDecryptionKey, testStructMacKey, protectedStruct)
 	if err != nil {
 		return nil, err
 	}
