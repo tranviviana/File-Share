@@ -800,8 +800,8 @@ func ProtectFileLength(protectedFileKey []byte, fileLength int) (protectedFileLe
 	return protectedFileLength, nil
 }
 func ProtectContentUUID(protectedFileKey []byte) (protectedContentUUID []byte, err error) {
-	randomUUID := uuid.New()
-	byteRandomUUID, err := json.Marshal(randomUUID)
+	contentUUID := uuid.New()
+	byteRandomUUID, err := json.Marshal(contentUUID)
 	if err != nil {
 		return nil, errors.New("could not marshal the content point uuid")
 	}
@@ -843,7 +843,7 @@ func GetFile(protectedFileStruct []byte, protectedFileKey []byte) (fileContentFr
 	protectedContentUUID := fileStruct.FileContentFront
 	protectedFileLength := fileStruct.FileLength
 
-	fileContentFront, err = RecoverFileContentUUID(protectedContentUUID, protectedFileKey)
+	fileContentFront, err = RecoverContentUUID(protectedContentUUID, protectedFileKey)
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
@@ -876,7 +876,7 @@ func RecoverFileLength(protectedFileLength []byte, protectedFileKey []byte) (fil
 	fileLength = tempFileLength
 	return fileLength, nil
 }
-func RecoverFileContentUUID(protectedFileContentPtr []byte, protectedFileKey []byte) (fileUUID uuid.UUID, err error) {
+func RecoverContentUUID(protectedFileContentPtr []byte, protectedFileKey []byte) (contentUUID uuid.UUID, err error) {
 	decryptionContentPtr, err := ConstructKey("encryption for content pointer start", "could not create an encryption key for the content pointer", protectedFileKey)
 	if err != nil {
 		return uuid.Nil, err
@@ -885,17 +885,15 @@ func RecoverFileContentUUID(protectedFileContentPtr []byte, protectedFileKey []b
 	if err != nil {
 		return uuid.Nil, err
 	}
-	byteFileUUID, err := CheckAndDecrypt(protectedFileContentPtr, macContentPtr, decryptionContentPtr)
+	byteContentUUID, err := CheckAndDecrypt(protectedFileContentPtr, macContentPtr, decryptionContentPtr)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	var tempFileUUID uuid.UUID
-	err = json.Unmarshal(byteFileUUID, &tempFileUUID)
+	err = json.Unmarshal(byteContentUUID, &contentUUID)
 	if err != nil {
-		return uuid.Nil, errors.New("could not retreive file uuid because of unmarshalling")
+		return uuid.Nil, errors.New("could not unmarshal uuid")
 	}
-	fileUUID = tempFileUUID
-	return fileUUID, nil
+	return contentUUID, nil
 }
 
 /*-----END Helper Functions for GetFile ---------- */
