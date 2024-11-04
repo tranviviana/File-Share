@@ -618,26 +618,25 @@ func RecoverFileKey(protectedFileKey []byte, cCAprotectedKey []byte) (fileKey []
 	}
 	return fileKey, nil
 }
+
 func RecoverFileUUID(protectedFileUUID []byte, cCAprotectedKey []byte) (fileUUID uuid.UUID, err error) {
 	// recover the file uuid for the owners communication channel
-	testEncryptionFileUUID, err := ConstructKey("encryption for file UUID", "could not created encryption key for the file UUID", cCAprotectedKey)
+	decryptionFileUUID, err := ConstructKey("encryption for file UUID", "could not created encryption key for the file UUID", cCAprotectedKey)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	testMacFileUUID, err := ConstructKey("mac for file UUID", "could not create mac key for the fille UUID", cCAprotectedKey)
+	macFileUUID, err := ConstructKey("mac for file UUID", "could not create mac key for the fille UUID", cCAprotectedKey)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	byteFileUUID, err := CheckAndDecrypt(protectedFileUUID, testMacFileUUID, testEncryptionFileUUID)
+	byteFileUUID, err := CheckAndDecrypt(protectedFileUUID, macFileUUID, decryptionFileUUID)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	var tempfileUUID uuid.UUID
-	err = json.Unmarshal(byteFileUUID, &tempfileUUID)
+	err = json.Unmarshal(byteFileUUID, &fileUUID)
 	if err != nil {
 		return uuid.Nil, errors.New("could not unmarshal file uuid")
 	}
-	fileUUID = tempfileUUID
 	return fileUUID, nil
 }
 
@@ -787,14 +786,14 @@ func ProtectCCFileStruct(protectedCCKey []byte, CCKey []byte) (protectedCCFileSt
 /*-----------------ACTIVE RECIPIENT Edition: Protecting and Restoring CC channel----------------------*/
 /***------------------------------------------------------Step Two (for Owner) and Step Three (for active recipients) to Getting a File------------------------------***/
 
-func ProtectFile(protectedFileKey []byte, content []byte) (protectedFileStruct []byte, err error) {
+func ProtectContent(protectedFileKey []byte, content []byte) (protectedFileStruct []byte, err error) {
 	//protectedFileKey is from the communications channel
 	var fileStruct File
 	protectedFileLength, err := ProtectFileLength(protectedFileKey, len(content))
 	if err != nil {
 		return nil, err
 	}
-	protectedContentUUID, err := ProtectedFrontPtr(protectedFileKey)
+	protectedContentUUID, err := ProtectContentUUID(protectedFileKey)
 	if err != nil {
 		return nil, err
 	}
@@ -840,7 +839,7 @@ func ProtectFileLength(protectedFileKey []byte, fileLength int) (protectedFileLe
 	}
 	return protectedFileLength, nil
 }
-func ProtectedFrontPtr(protectedFileKey []byte) (protectedContentUUID []byte, err error) {
+func ProtectContentUUID(protectedFileKey []byte) (protectedContentUUID []byte, err error) {
 	randomUUID := uuid.New()
 	byteRandomUUID, err := json.Marshal(randomUUID)
 	if err != nil {
@@ -859,7 +858,6 @@ func ProtectedFrontPtr(protectedFileKey []byte) (protectedContentUUID []byte, er
 		return nil, err
 	}
 	return protectedContentUUID, nil
-
 }
 
 /*------- END Helper Functions for Protect File ----------*/
@@ -885,7 +883,7 @@ func RecoverFileContents(protectedFileStruct []byte, protectedFileKey []byte) (f
 	protectedContentUUID := fileStruct.FileContentFront
 	protectedFileLength := fileStruct.FileLength
 
-	fileContentFront, err = RecoverFileUUID(protectedContentUUID, protectedFileKey)
+	fileContentFront, err = RecoverFileContentUUID(protectedContentUUID, protectedFileKey)
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
@@ -1476,7 +1474,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		if err != nil {
 			return err
 		}
-		protectedFileStruct, err := ProtectFile(fileKey, content)
+		protectedFileStruct, err := ProtectContent(fileKey, content)
 		if err != nil {
 			return err
 		}
