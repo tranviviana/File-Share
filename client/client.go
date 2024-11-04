@@ -1384,43 +1384,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			return nil
 		}
 		if !owner && err == nil {
-			/*
-					//if shared user , go through acceptedstruct  and  communicationschannel
-					protectedA, protectedAcceptedKey := protectedCCA, cCAProtectedKey
-					commsKey, commsChannelUUID, err := RecoverAcceptedStructContents(protectedA, protectedAcceptedKey)
-					if err != nil {
-						return err
-					}
-					byteCommsChannel, ok := userlib.DatastoreGet(commsChannelUUID)
-					if !ok {
-						return errors.New("could not retrieve communications channel")
-					}
-					var commsChannel CommunicationsChannel
-					err = json.Unmarshal(byteCommsChannel, &commsChannel)
-					var file File
-					err = json.Unmarshal(commsChannel.FileStruct, &file)
-					if err != nil {
-						return errors.New("could not unmarshal")
-					}
-					frontPointer, fileContent, err := GetFile(file, commsChannel.FileKey)
-					if err != nil {
-						return errors.New("could not unmarshal")
-					}
-
-					if int64(len(content)/64) > int64(file.FileLength/64) {
-						err = fileContentFilling(commsChannel.FileKey, frontPointer, file length?, content)
-						if err != nil {
-							return err
-						}
-					} else {
-						err = RestoreSmallerFile(int64(len(content)/64), int64(fileLength/64), frontPtr)
-						if err != nil {
-							return err
-						}
-					}
-					return nil
-				} else {
-					return err */
+			//if shared user , go through acceptedstruct  and  communicationschannel
 		}
 
 	} else {
@@ -1454,11 +1418,6 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 }
 
 func (userdata *User) AppendToFile(filename string, content []byte) (err error) {
-	/*byteFilename, err := json.Marshal(filename)
-	if err != nil{
-		return errors.New("could not marshal filename")
-	}*/
-
 	return nil
 }
 
