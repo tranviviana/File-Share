@@ -746,37 +746,37 @@ func ProtectCCFileStruct(protectedCCKey []byte, CCKey []byte) (protectedCCFileSt
 /*-----------------ACTIVE RECIPIENT Edition: Protecting and Restoring CC channel----------------------*/
 /***------------------------------------------------------Step Two (for Owner) and Step Three (for active recipients) to Getting a File------------------------------***/
 
-func SetFile(protectedFileKey []byte, content []byte) (protectedFileStruct []byte, err error) {
+func SetFile(protectedFileKey []byte, content []byte) (protectedFileStruct []byte, protectedContentUUID []byte, err error) {
 	//protectedFileKey is from the communications channel
 	var fileStruct File
 	protectedFileLength, err := ProtectFileLength(protectedFileKey, len(content))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	protectedContentUUID, err := ProtectContentUUID(protectedFileKey)
+	fileStruct.FileLength = protectedFileLength
+	protectedContentUUID, err = ProtectContentUUID(protectedFileKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	fileStruct.FileContentFront = protectedContentUUID
-	fileStruct.FileLength = protectedFileLength
 
 	byteFileStruct, err := json.Marshal(fileStruct)
 	if err != nil {
-		return nil, errors.New("could not marshal the file struct accessible to everyone")
+		return nil, nil, errors.New("could not marshal the file struct accessible to everyone")
 	}
 	encryptionFileStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	macFileStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", protectedFileKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	protectedFileStruct, err = EncThenMac(encryptionFileStruct, macFileStruct, byteFileStruct)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return protectedFileStruct, nil
+	return protectedFileStruct, protectedContentUUID, nil
 }
 
 /*-------Helper Functions for Protect File ----------*/
@@ -942,9 +942,10 @@ func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.
 	}
 	return nextUUID, nil
 }
-func SetFileContent(fileKey []byte, contentStart uuid.UUID, fileLength int, content []byte) (err error) {
+func SetFileContent(fileKey []byte, contentUUID uuid.UUID, fileLength int, content []byte) (err error) {
 	//64 block size
-	currentUUID := contentStart
+
+	currentUUID := contentUUID
 	var roundsEncryption int
 	if fileLength%64 == 0 {
 		roundsEncryption = fileLength / 64
@@ -995,12 +996,13 @@ func SetFileContent(fileKey []byte, contentStart uuid.UUID, fileLength int, cont
 		if err != nil {
 			return err
 		}
-		currentUUID, err = GenerateNextUUID(contentStart, int64(currentRound+1))
+
+		userlib.DatastoreSet(currentUUID, protectedContentStruct)
+		currentRound += 1
+		currentUUID, err = GenerateNextUUID(contentUUID, int64(currentRound))
 		if err != nil {
 			return err
 		}
-		userlib.DatastoreSet(currentUUID, protectedContentStruct)
-		currentRound += 1
 	}
 	return nil
 }
@@ -1071,7 +1073,8 @@ func GetFileContent(fileKey []byte, fileLength int, fileContentFront uuid.UUID) 
 		content = append(content, decryptedContent...)
 
 		// Generate the next UUID in the chain
-		currentUUID, err = GenerateNextUUID(fileContentFront, int64(currentRound+1))
+		currentRound += 1
+		currentUUID, err = GenerateNextUUID(fileContentFront, int64(currentRound))
 		if err != nil {
 			return nil, err
 		}
@@ -1351,31 +1354,29 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	if exists {
 		// the file name is in the person name space (need to overwrite)
 		owner, err := IsCC(protectedCCA, cCAProtectedKey)
-		var protectedCC []byte
-		var CCProtectedKey []byte
 		if owner && err == nil {
 			// you are the owner --> communications channel
-			protectedCC, CCProtectedKey = protectedCCA, cCAProtectedKey
+			protectedCC, CCProtectedKey := protectedCCA, cCAProtectedKey
 			fileKey, fileUUID, _, err := GetCommunicationsChannel(protectedCC, CCProtectedKey)
 			if err != nil {
 				return err
 			}
-			byteFile, ok := userlib.DatastoreGet(fileUUID)
+			protectedFileStruct, ok := userlib.DatastoreGet(fileUUID)
 			if !ok {
 				return errors.New("file does not exist in datastore")
 			}
-			frontPtr, fileLength, err := GetFile(byteFile, fileKey)
+			contentUUID, fileLength, err := GetFile(protectedFileStruct, fileKey)
 			if err != nil {
 				return err
 			}
 			//divide len into blocks
-			if int64(len(content)/64) > int64(fileLength/64) {
-				err = SetFileContent(fileKey, frontPtr, fileLength, content)
+			if int64(len(content)/64) >= int64(fileLength/64) {
+				err = SetFileContent(fileKey, contentUUID, fileLength, content)
 				if err != nil {
 					return err
 				}
 			} else {
-				err = ReStoreSmallerFile(int64(len(content)/64), int64(fileLength/64), frontPtr)
+				err = ReStoreSmallerFile(int64(len(content)/64), int64(fileLength/64), contentUUID)
 				if err != nil {
 					return err
 				}
@@ -1432,12 +1433,15 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		if err != nil {
 			return err
 		}
-		protectedFileStruct, err := SetFile(fileKey, content)
+		protectedFileStruct, protectedContentUUID, err := SetFile(fileKey, content)
 		if err != nil {
 			return err
 		}
-
-		err = SetFileContent(fileKey, fileUUID, len(content), content)
+		contentUUID, err := RecoverContentUUID(protectedContentUUID, fileKey)
+		if nil != err {
+			return err
+		}
+		err = SetFileContent(fileKey, contentUUID, len(content), content)
 		if err != nil {
 			return err
 		}
@@ -1476,24 +1480,22 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 
 	// the file name is in the person name space (need to overwrite)
 	owner, err := IsCC(protectedCCA, cCAProtectedKey)
-	var protectedCC []byte
-	var CCProtectedKey []byte
 	if owner && err == nil {
 		// you are the owner --> communications channel
-		protectedCC, CCProtectedKey = protectedCCA, cCAProtectedKey
+		protectedCC, CCProtectedKey := protectedCCA, cCAProtectedKey
 		fileKey, fileUUID, _, err := GetCommunicationsChannel(protectedCC, CCProtectedKey)
 		if err != nil {
 			return nil, err
 		}
-		byteFile, ok := userlib.DatastoreGet(fileUUID)
+		protectedFileStruct, ok := userlib.DatastoreGet(fileUUID)
 		if !ok {
 			return nil, errors.New("file does not exist in datastore")
 		}
-		frontPtr, fileLength, err := GetFile(byteFile, fileKey)
+		contentUUID, fileLength, err := GetFile(protectedFileStruct, fileKey)
 		if err != nil {
 			return nil, err
 		}
-		content, err = GetFileContent(fileKey, fileLength, frontPtr)
+		content, err = GetFileContent(fileKey, fileLength, contentUUID)
 		if err != nil {
 			return nil, err
 		}
