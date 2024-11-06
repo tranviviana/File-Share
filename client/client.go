@@ -3,6 +3,7 @@ package client
 // CS 161 Project 2
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"strconv"
 
@@ -419,29 +420,45 @@ func SetFileContent(fileKey []byte, contentUUID uuid.UUID, fileLength int, conte
 	return nil
 }
 func GenerateNextUUID(contentStart uuid.UUID, blockNumber int64) (nextUUID uuid.UUID, err error) {
-	//shouldn't matter what int data type as long as its 128 bits
-	// block size of 64
+	if blockNumber < 0 {
+		return uuid.Nil, errors.New("GenerateNetUUID: block number must be non-negative")
+	}
 
-	byteCurrentUUID, err := json.Marshal(contentStart)
-	if err != nil {
-		return uuid.Nil, errors.New("could not convert UUID to the byte UUID")
+	// Create a length 16 byte slice from the UUID
+	uuidBytes := contentStart[:]
+	if len(uuidBytes) != 16 {
+		return uuid.Nil, errors.New("GenerateNetUUID: UUID size incorrect")
 	}
-	var intUUID int64
-	err = json.Unmarshal(byteCurrentUUID, &intUUID)
+
+	// Create length 16 bytes from blockNumber
+	blockBytes, err := json.Marshal(blockNumber)
 	if err != nil {
-		return uuid.Nil, errors.New("could not convert byte UUID to an int")
+		return uuid.Nil, errors.New("GenerateNetUUID: could not marshal block number")
 	}
-	intUUID += blockNumber
-	byteAddUUID, err := json.Marshal(intUUID)
+	hardCodedText, err := json.Marshal("sourcekey to hash the blockNumber into a unique length 16 []byte")
 	if err != nil {
-		return uuid.Nil, errors.New("could not convert the uuid back to bytes")
+		return uuid.Nil, errors.New("GenerateNetUUID: could not marshal text")
 	}
-	var newUUID uuid.UUID
-	err = json.Unmarshal(byteAddUUID, &newUUID)
+	hashedBlockBytes, err := userlib.HashKDF(hardCodedText[:16], blockBytes)
 	if err != nil {
-		return uuid.Nil, errors.New("could not convert to uuid")
+		return uuid.Nil, errors.New("GenerateNetUUID: could not hash blockBytes")
 	}
-	return newUUID, nil
+	if len(hashedBlockBytes) != 64 {
+		return uuid.Nil, errors.New("GenerateNetUUID: hashedBlockBytes incorrect size")
+	}
+	hashedBlockBytes = hashedBlockBytes[:16]
+
+	//xor uuid & block bytes
+	for i := 0; i < 16; i++ {
+		uuidBytes[15-i] ^= hashedBlockBytes[15-i]
+	}
+
+	// Return the new UUID
+	nextUUID, err = uuid.FromBytes(uuidBytes)
+	if err != nil {
+		return uuid.Nil, errors.New("GenerateNetUUID: could not convert bytes to uuid")
+	}
+	return nextUUID, nil
 }
 func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.UUID) (err error) {
 	//new file length is shorter than old file length
@@ -708,7 +725,12 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	randomCommsUUID := userlib.RandomBytes(16)
+	byteRandomCommsUUID := userlib.RandomBytes(16)
+	stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
+	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
+	if err != nil {
+		return nil, errors.New("could not marshal randomCommsUUID")
+	}
 	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", personalFirstKey)
 	if err != nil {
 		return nil, err
@@ -717,7 +739,7 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, randomCommsUUID)
+	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteStringRandomComms)
 	if err != nil {
 		return nil, err
 	}
