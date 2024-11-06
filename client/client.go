@@ -1362,11 +1362,10 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 	newFileLength := +fileLength + len(content)
 	if fileLength%64 == 0 {
 		//filled that last block completely
-		currentBlock = fileLength / 64
-		currentBlock += 1
+		currentBlock = fileLength / 64 //currentBlock is 1 less the rounds of decryption because we use < instead of <=
 	} else {
 		//last block filled
-		currentBlock = (fileLength / 64) + 1
+		currentBlock = (fileLength / 64)
 		overFlowStartingPt, err := GenerateNextUUID(contentPtr, int64(currentBlock))
 		if err != nil {
 			return err
@@ -1386,49 +1385,57 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 		return err
 	}
 	//update file length
+	updatedProtectedFile, err := setNewFileLength(newFileLength, fileKey, protectedFile)
+	if err != nil {
+		return err
+	}
+
+	//reset new file struct with the updated length
+	userlib.DatastoreSet(fileStructUUID, updatedProtectedFile)
 
 	return nil
 }
-func setNewFileLength(fileLength int, fileKey []byte, protectedFile []byte) (err error) {
+func setNewFileLength(newFileLength int, fileKey []byte, protectedFile []byte) (updatedProtectedFile []byte, err error) {
 	decryptionFileStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", fileKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	macFileStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", fileKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	byteFileStruct, err := CheckAndDecrypt(protectedFile, macFileStruct, decryptionFileStruct)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var tempFileStruct File
-	err = json.Unmarshal(byteFileStruct, &tempFileStruct)
+	var fileStruct File
+	err = json.Unmarshal(byteFileStruct, &fileStruct)
 	if err != nil {
-		return errors.New("could not unmarshal the file struct")
+		return nil, errors.New("could not unmarshal the file struct")
 	}
 
 	//update file length
-	byteFileLength, err := json.Marshal(fileLength)
+	byteFileLength, err := json.Marshal(newFileLength)
 	if err != nil {
-		return errors.New("could not marshal the file length to protect the file length")
+		return nil, errors.New("could not marshal the file length to protect the file length")
 	}
 	encryptionFileLength, err := ConstructKey("encryption key for the file length", "could not create encryption key for the file length", fileKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	macFileLength, err := ConstructKey("mac Key for the file length", "could not create mac key for the file length", fileKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	protectedFileLength, err := EncThenMac(encryptionFileLength, macFileLength, byteFileLength)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// getting fil struct and editing it
+	fileStruct.FileLength = protectedFileLength
 
-	byteFileStruct, err := json.Marshal(fileStruct)
+	byteFileStruct, err = json.Marshal(fileStruct)
 	if err != nil {
 		return nil, errors.New("could not marshal the file struct accessible to everyone")
 	}
@@ -1436,14 +1443,15 @@ func setNewFileLength(fileLength int, fileKey []byte, protectedFile []byte) (err
 	if err != nil {
 		return nil, err
 	}
-	macFileStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", fileKey)
+	macFileStruct, err = ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", fileKey)
 	if err != nil {
 		return nil, err
 	}
-	protectedFileStruct, err = EncThenMac(encryptionFileStruct, macFileStruct, byteFileStruct)
+	updatedProtectedFile, err = EncThenMac(encryptionFileStruct, macFileStruct, byteFileStruct)
 	if err != nil {
 		return nil, err
 	}
+	return updatedProtectedFile, nil
 
 }
 
