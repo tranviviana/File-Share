@@ -531,7 +531,7 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 		}
 
 		// Verify and decrypt the actual file content
-		decryptedContent, err := CheckAndDecrypt(contentBlock.BlockEncrypted, macContentKey, decryptionContentKey)
+		decryptedContent, err := CheckAndDecrypt(decryptionContentKey, macContentKey, contentBlock.BlockEncrypted)
 		if err != nil {
 			return nil, errors.New("GetFileContent: integrity check failed for file content")
 		}
@@ -1090,9 +1090,29 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
+	//not actually gonna be used by recipients tho
+	byteRandomCommsUUID := userlib.RandomBytes(16)
+	stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
+	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
+	if err != nil {
+		return uuid.Nil, nil, nil, errors.New("could not marshal randomCommsUUID")
+	}
+	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", personalFirstKey)
+	if err != nil {
+		return uuid.Nil, nil, nil, err
+	}
+	macRandomCommsUUID, err := ConstructKey("mac for random comms", "could not create mac key for the comms UUID", personalFirstKey)
+	if err != nil {
+		return uuid.Nil, nil, nil, err
+	}
+	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteStringRandomComms)
+	if err != nil {
+		return uuid.Nil, nil, nil, err
+	}
 
 	recipientCC.FileKey = protectedFileKey
 	recipientCC.FileStruct = protectedFileUUID
+	recipientCC.FileStruct = protectedBaseCommsUUID
 
 	// hiding the struct and marshaling
 	byteRecipientCC, err := json.Marshal(recipientCC)
@@ -1294,7 +1314,137 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 }
 
 func (userdata *User) AppendToFile(filename string, content []byte) error {
+	personalFirstKey, personalFirstUUID, _, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
+	if err != nil {
+		return nil
+	}
+	protectedFirstEntrance, ok := userlib.DatastoreGet(personalFirstUUID)
+	if !ok {
+		return errors.New("file is not in file space")
+	}
+	owner, err := IsCC(protectedFirstEntrance, personalFirstKey)
+	if err != nil {
+		return err
+	}
+	var fileKey []byte
+	var fileStructUUID uuid.UUID
+	if owner {
+		//first entrance is then the CC channel
+		fileKey, fileStructUUID, _, err = AccessCC(personalFirstKey, protectedFirstEntrance)
+		if err != nil {
+			return err
+		}
+	} else {
+		// not the owner so accepted channel -> cc channel -> file struct
+		commsKey, commsChannelUUID, err := AccessA(personalFirstKey, protectedFirstEntrance)
+		if err != nil {
+			return err
+		}
+		protectedCommsStruct, ok := userlib.DatastoreGet(commsChannelUUID)
+		if !ok {
+			return errors.New("access has been revoked or file does not exist in namespace")
+		}
+		fileKey, fileStructUUID, _, err = AccessCC(commsKey, protectedCommsStruct)
+		if err != nil {
+			return err
+		}
+	}
+	protectedFile, ok := userlib.DatastoreGet(fileStructUUID)
+	if !ok {
+		return errors.New("file does not exist")
+	}
+	fileLength, contentPtr, err := AccessFile(protectedFile, fileKey)
+	if err != nil {
+		return err
+	}
+	// add to content stuff
+	var currentBlock int
+	newFileLength := +fileLength + len(content)
+	if fileLength%64 == 0 {
+		//filled that last block completely
+		currentBlock = fileLength / 64
+		currentBlock += 1
+	} else {
+		//last block filled
+		currentBlock = (fileLength / 64) + 1
+		overFlowStartingPt, err := GenerateNextUUID(contentPtr, int64(currentBlock))
+		if err != nil {
+			return err
+		}
+		oldContent, err := GetFileContent(fileKey, 1, overFlowStartingPt)
+		if err != nil {
+			return err
+		}
+		content = append(oldContent, content...)
+	}
+	appendedStartingPt, err := GenerateNextUUID(contentPtr, int64(currentBlock))
+	if err != nil {
+		return err
+	}
+	err = SetFileContent(fileKey, appendedStartingPt, len(content), content)
+	if err != nil {
+		return err
+	}
+	//update file length
+
 	return nil
+}
+func setNewFileLength(fileLength int, fileKey []byte, protectedFile []byte) (err error) {
+	decryptionFileStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", fileKey)
+	if err != nil {
+		return err
+	}
+	macFileStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", fileKey)
+	if err != nil {
+		return err
+	}
+	byteFileStruct, err := CheckAndDecrypt(protectedFile, macFileStruct, decryptionFileStruct)
+	if err != nil {
+		return err
+	}
+	var tempFileStruct File
+	err = json.Unmarshal(byteFileStruct, &tempFileStruct)
+	if err != nil {
+		return errors.New("could not unmarshal the file struct")
+	}
+
+	//update file length
+	byteFileLength, err := json.Marshal(fileLength)
+	if err != nil {
+		return errors.New("could not marshal the file length to protect the file length")
+	}
+	encryptionFileLength, err := ConstructKey("encryption key for the file length", "could not create encryption key for the file length", fileKey)
+	if err != nil {
+		return err
+	}
+	macFileLength, err := ConstructKey("mac Key for the file length", "could not create mac key for the file length", fileKey)
+	if err != nil {
+		return err
+	}
+	protectedFileLength, err := EncThenMac(encryptionFileLength, macFileLength, byteFileLength)
+	if err != nil {
+		return err
+	}
+
+	// getting fil struct and editing it
+
+	byteFileStruct, err := json.Marshal(fileStruct)
+	if err != nil {
+		return nil, errors.New("could not marshal the file struct accessible to everyone")
+	}
+	encryptionFileStruct, err := ConstructKey("encryption key for the file struct", "could not encrypt the file struct accessible to everyone", fileKey)
+	if err != nil {
+		return nil, err
+	}
+	macFileStruct, err := ConstructKey("mac key for the file struct", "could not create a mac key for the file struct accessible to everyone", fileKey)
+	if err != nil {
+		return nil, err
+	}
+	protectedFileStruct, err = EncThenMac(encryptionFileStruct, macFileStruct, byteFileStruct)
+	if err != nil {
+		return nil, err
+	}
+
 }
 
 func (userdata *User) LoadFile(filename string) (content []byte, err error) {
