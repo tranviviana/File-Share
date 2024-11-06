@@ -1095,6 +1095,11 @@ func CreateSharedCCKey(filename string, username []byte, recipient string, rando
 	}
 	byteCollab := append(byteFilename, byteRecipient...)
 	byteCollab = append(byteCollab, username...)
+	byteRandomCommsUUID, err := json.Marshal(randomCommsUUID)
+	if err != nil {
+		return nil, uuid.Nil, errors.New("could not marshal key for recipient")
+	}
+	byteCollab = append(byteCollab, byteRandomCommsUUID...)
 	sharedKey = userlib.Argon2Key(byteCollab, username, 16) //hashKDF off of this
 
 	byteNewLocation, err := ConstructKey(randomCommsUUID, "could not generate a new uuid location", sharedKey)
@@ -1193,6 +1198,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	}
 	return communicationLocation, protectedRecipientCC, ccKey, nil
 }
+func CreateInvitation(commsKey []byte, CommunicationsChannel uuid.UUID)
 
 /*----------Create Invitation ----------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
