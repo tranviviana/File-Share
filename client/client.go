@@ -531,7 +531,7 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 		}
 
 		// Verify and decrypt the actual file content
-		decryptedContent, err := CheckAndDecrypt(decryptionContentKey, macContentKey, contentBlock.BlockEncrypted)
+		decryptedContent, err := CheckAndDecrypt(contentBlock.BlockEncrypted, macContentKey, decryptionContentKey)
 		if err != nil {
 			return nil, errors.New("GetFileContent: integrity check failed for file content")
 		}
@@ -1359,28 +1359,31 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 	}
 	// add to content stuff
 	var currentBlock int
-	newFileLength := +fileLength + len(content)
+	var overFlowStartingPt uuid.UUID
+	newFileLength := fileLength + len(content)
 	if fileLength%64 == 0 {
 		//filled that last block completely
-		currentBlock = fileLength / 64 //currentBlock is 1 less the rounds of decryption because we use < instead of <=
+		currentBlock = (fileLength / 64) + 1 //currentBlock is 1 less the rounds of decryption because we use < instead of <=
 	} else {
 		//last block filled
+		//ex 65 bytes of previous content, curr block = 1
 		currentBlock = (fileLength / 64)
-		overFlowStartingPt, err := GenerateNextUUID(contentPtr, int64(currentBlock))
-		if err != nil {
-			return err
-		}
-		oldContent, err := GetFileContent(fileKey, 1, overFlowStartingPt)
-		if err != nil {
-			return err
-		}
-		content = append(oldContent, content...)
 	}
-	appendedStartingPt, err := GenerateNextUUID(contentPtr, int64(currentBlock))
+	if currentBlock == 0 {
+		overFlowStartingPt = contentPtr
+	} else {
+		overFlowStartingPt, err = GenerateNextUUID(contentPtr, int64(currentBlock))
+		if err != nil {
+			return err
+		}
+	}
+	oldContent, err := GetFileContent(fileKey, fileLength, overFlowStartingPt)
 	if err != nil {
 		return err
 	}
-	err = SetFileContent(fileKey, appendedStartingPt, len(content), content)
+	content = append(oldContent, content...)
+
+	err = SetFileContent(fileKey, overFlowStartingPt, len(content), content)
 	if err != nil {
 		return err
 	}
