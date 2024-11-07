@@ -1241,10 +1241,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	}
 	return communicationLocation, protectedRecipientCC, ccKey, nil
 }
-<<<<<<< HEAD
 
-//func CreateInvitation(commsKey []byte, CommunicationsChannel uuid.UUID)
-=======
 func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, communicationLocation uuid.UUID, ccKey []byte) (protectedInvitation []byte, invitationUUID uuid.UUID, err error) {
 	//(signatureKey, recipientPublicKey, recipientCClocation, ccKey)
 	/*type Invitation struct {
@@ -1257,10 +1254,11 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not encrypt ccKey")
 	}
-	protectedCCKey, err := userlib.DSSign(signature, encryptedCCKey)
+	signatureCCKey, err := userlib.DSSign(signature, encryptedCCKey)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not accurately sign message")
 	}
+	protectedCCKey := append(signatureCCKey, encryptedCCKey...)
 	//encrypting comms channel uuid
 	byteComms, err := json.Marshal(communicationLocation)
 	if err != nil {
@@ -1270,10 +1268,11 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not encrypt the communications channel")
 	}
-	protectedComms, err := userlib.DSSign(signature, encryptedComms)
+	signatureComms, err := userlib.DSSign(signature, encryptedComms)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not sign the communicaton channel")
 	}
+	protectedComms := append(signatureComms, encryptedComms...)
 
 	var invitation Invitation
 	invitation.CommsChannel = protectedComms
@@ -1284,21 +1283,94 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 		return nil, uuid.Nil, errors.New("could not marshall invitation")
 	}
 
-	//encrypt the invitation
-	encryptedByteInvitation, err := userlib.PKEEnc(recipientPKE, byteInvitation)
+	aesKey := userlib.RandomBytes(16)
+
+	// Step 2: Encrypt the invitation with AES using the generated key
+	iv := userlib.RandomBytes(16) // Generate an IV
+	encryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
+
+	// Step 3: Encrypt the AES key with RSA using the recipient's public key
+	encryptedAESKey, err := userlib.PKEEnc(recipientPKE, aesKey)
 	if err != nil {
-		return nil, uuid.Nil, errors.New("could not encrypt the invitation struct")
+		return nil, uuid.Nil, errors.New("could not encrypt the AES key with RSA")
 	}
-	protectedInvitation, err = userlib.DSSign(signature, encryptedByteInvitation)
+
+	// Step 4: Combine encrypted AES key and encrypted invitation as final result
+	// You may want to define a struct or append both byte arrays if they need to be sent/stored together.
+	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
+
+	//encrypt the invitation
+	signatureInvitation, err := userlib.DSSign(signature, encryptedByteInvitation)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not sign the invitation struct")
 	}
+	protectedInvitation = append(signatureInvitation, encryptedByteInvitation...)
 	invitationUUID = uuid.New()
 	return protectedInvitation, invitationUUID, nil
 }
 
-func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byte) (acceptedStruct []byte, err error)
->>>>>>> 3db123e61d05491fe073595bf6b21aa020791815
+func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byte, senderUsername string, personalFirstKey []byte) (protectedAStruct []byte, err error) {
+	//make sure you deleted the uuid pointer
+	//decrypt invitation
+	_, verificationKey, err := RestoreVERIFICATIONPublic(senderUsername)
+	if err != nil {
+		return nil, err
+	}
+	if len(invitationStruct) < 512 {
+		return nil, errors.New("invitation struct too small")
+	}
+	signatureInvitation := invitationStruct[:256]
+	encryptedAESKey := invitationStruct[256:512]
+	encryptedByteInvitation := invitationStruct[512:]
+	err = userlib.DSVerify(verificationKey, append(encryptedAESKey, encryptedByteInvitation...), signatureInvitation)
+	if err != nil {
+		return nil, errors.New("verification failed, cannot trust that this is the right info")
+	}
+	aesKey, err := userlib.PKEDec(privateKey, encryptedAESKey)
+	if err != nil {
+		return nil, errors.New("could not decrypt the AES key with RSA")
+	}
+
+	// Step 4: Decrypt the Invitation with AES using the decrypted AES key
+	// Since the IV is included in the AES-encrypted invitation, we can directly decrypt it
+	byteInvitation := userlib.SymDec(aesKey, encryptedByteInvitation)
+
+	var invitation Invitation
+	err = json.Unmarshal(byteInvitation, &invitation)
+	if err != nil {
+		return nil, errors.New("could not unmarshal byte invitation ")
+	}
+	//un encrypting the componenets
+	protectedCommsChannel := invitation.CommsChannel
+	encryptedCC := protectedCommsChannel[256:]
+	signatureCC := protectedCommsChannel[:256]
+	err = userlib.DSVerify(verificationKey, encryptedCC, signatureCC)
+	if err != nil {
+		return nil, errors.New("verification failed in retrieving location, cannot trust")
+	}
+	byteCC, err := userlib.PKEDec(privateKey, encryptedCC)
+	if err != nil {
+		return nil, errors.New("problem with decrypting CC location")
+	}
+	protectedCCKey := invitation.CommsKey
+	encryptedCCKey := protectedCCKey[256:]
+	signatureCCKey := protectedCCKey[:256]
+	err = userlib.DSVerify(verificationKey, encryptedCCKey, signatureCCKey)
+	if err != nil {
+		return nil, errors.New("verification failed in retrieving key, cannot trust")
+	}
+	ccKey, err := userlib.PKEDec(privateKey, encryptedCC)
+	if err != nil {
+		return nil, errors.New("could not decrypt CC key")
+	}
+	protectedAStruct, err = CreateNewA(ccKey, byteCC, personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return protectedAStruct, nil
+
+}
 
 /*----------Create Invitation ----------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
@@ -1627,7 +1699,7 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		return uuid.Nil, errors.New("that user doesn't exist")
 	}
 	// check existence in your name space
-	personalFirstKey, personalFirstUUID, protectedFirst, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
+	personalFirstKey, personalFirstUUID, _, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
 	if err != nil {
 		return uuid.Nil, errors.New("File does not exist in your name space")
 	}
@@ -1654,7 +1726,7 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		CommunicationsChannelUUID := personalFirstUUID
 		protectedCC, ok := userlib.DatastoreGet(CommunicationsChannelUUID)
 		if !ok {
-			return uuid.Nil, errors.New("Owner's CC issue")
+			return uuid.Nil, errors.New("owner's CC issue")
 		}
 		//create a new copy of CC for the recipient
 		recipientCClocation, protectedRecipientCC, tempccKey, err := CreateCopyCC(protectedCC, personalFirstKey, filename, userdata.username, recipientUsername)
@@ -1668,7 +1740,7 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		acceptedUUID := personalFirstUUID
 		protectedA, ok := userlib.DatastoreGet(acceptedUUID)
 		if !ok {
-			return uuid.Nil, errors.New("You can't be sharing this it doesnt exist")
+			return uuid.Nil, errors.New("you can't be sharing this it doesnt exist")
 		}
 		ccKey, recipientCClocation, err = AccessA(personalFirstKey, protectedA)
 		if err != nil {
@@ -1685,6 +1757,31 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 }
 
 func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid.UUID, filename string) error {
+	exist, err := CheckUserExistenceString(senderUsername)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return errors.New("user does not exist")
+	}
+	protectedInvitation, ok := userlib.DatastoreGet(invitationPtr)
+	if !ok {
+		return errors.New("invitation no longer exists")
+	}
+	privateKey, err := RestorePrivateKey(userdata.PrivateRsaKey, userdata.hashedPasswordKDF)
+	if err != nil {
+		return err
+	}
+	personalFirstKey, personalFirstUUID, _, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
+	if err != nil {
+		return err
+	}
+	protectedAStruct, err := DecryptInvitation(privateKey, protectedInvitation, senderUsername, personalFirstKey)
+	if err != nil {
+		return err
+	}
+	userlib.DatastoreSet(personalFirstUUID, protectedAStruct)
+	userlib.DatastoreDelete(invitationPtr)
 	return nil
 }
 

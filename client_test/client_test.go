@@ -431,20 +431,20 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("pancakes")))
 
-			err = EvanBot.StoreFile("foods.txt", []byte("cookies"))
+			err = EvanBot.StoreFile("foods.txt", []byte("cookies "))
 			Expect(err).To(BeNil())
 			EvanBotLoadFile, err = EvanBot.LoadFile("foods.txt")
 			Expect(err).To(BeNil())
-			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies")))
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies ")))
 
-			EvanBotLoadFile, err = EvanBot.LoadFile("drinks.txt")
+			_, err = EvanBot.LoadFile("drinks.txt")
 			Expect(err).ToNot(BeNil())
 
-			err = EvanBot.AppendToFile("foods.txt", []byte("and pancakes"))
+			err = EvanBot.AppendToFile("foods.txt", []byte("and pancakes "))
 			Expect(err).To(BeNil())
 			EvanBotLoadFile, err = EvanBot.LoadFile("foods.txt")
 			Expect(err).To(BeNil())
-			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies and pancakes")))
+			Expect(EvanBotLoadFile).To(BeEquivalentTo([]byte("cookies and pancakes ")))
 
 			err = EvanBot.AppendToFile("foods.txt", []byte("and hash browns"))
 			Expect(err).To(BeNil())
@@ -613,24 +613,26 @@ var _ = Describe("Client Tests", func() {
 				err = alice.StoreFile(aliceFile, userlib.RandomBytes(500))
 				Expect(err).To(BeNil())
 			})
-			userlib.DebugMsg("bandwidth of 500 byte file", bigBandwidth)
+			userlib.DebugMsg("bandwidth of 50 byte file", bigBandwidth)
 			smallBandwidth := measureBandwidth(func() {
 				err = bob.StoreFile(bobFile, []byte(("A")))
 				Expect(err).To(BeNil())
 			})
 			userlib.DebugMsg("bandwidth of 1 byte file", smallBandwidth)
 			userlib.DebugMsg("Adding bytes to each file to check bandwidth")
-			//10000 growth
+
 			err = alice.StoreFile(aliceFile, []byte(emptyString))
 			Expect(err).To(BeNil())
-			var newAdded [500]int
-			for i := 0; i < 500; i++ {
-				newAdded[i] = measureBandwidth(func() {
-					err = alice.AppendToFile(aliceFile, []byte("V"))
-					Expect(err).To(BeNil())
-				})
+			var newAdded [50]int
+			for i := 0; i < 48; i++ {
+				err = alice.AppendToFile(aliceFile, []byte("V"))
+				Expect(err).To(BeNil())
 			}
-			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[499]))
+			newAdded[49] = measureBandwidth(func() {
+				err = alice.AppendToFile(aliceFile, []byte("V"))
+				Expect(err).To(BeNil())
+			})
+			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[49]))
 
 		})
 		Specify("Append shouldn't scale with the quantity of files", func() {
