@@ -1576,7 +1576,17 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 }
 func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
 	//takes in the usernames
-	return nil, nil
+	usernames := userlib.SymDec(personalFirstKey, protectedUsernames)
+	byteAddedUsername, err := json.Marshal(addedUsername)
+	if err != nil {
+		return nil, errors.New("in ProtectUsernames: could not marshal added username")
+	}
+	hashedAddedUsername := userlib.Hash(byteAddedUsername)
+	usernames = append(usernames, hashedAddedUsername...)
+
+	IV := userlib.RandomBytes(16)
+	protectedAddedUsernames = userlib.SymEnc(personalFirstKey, IV, usernames)
+	return protectedAddedUsernames, nil
 }
 func RestoreUsernames(protectedUsernames []byte, sharingByte []byte, personalFirstKey []byte) (usernames []byte, err error) {
 	return nil, nil
