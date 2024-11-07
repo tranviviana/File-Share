@@ -3,7 +3,6 @@ package client
 // CS 161 Project 2
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"strconv"
 
@@ -29,9 +28,9 @@ type Invitation struct {
 	CommsChannel []byte //UUID of the commschannel RSA encrypted and signed
 }
 type CommunicationsChannel struct {
-	FileKey         []byte //randomly generated key which will change in revocation
-	FileStruct      []byte //randomly generated UUID which will change in revocation
-	SharingLocation []byte //randomly generated UUID for owner to place the communications channel or shared users
+	FileKey      []byte //randomly generated key which will change in revocation
+	FileStruct   []byte //randomly generated UUID which will change in revocation
+	SharingBytes []byte //random bytes to randomize comms locations and store shared username
 }
 type Accepted struct {
 	CommsKey     []byte //User Choice of encryption but rederivable
@@ -727,7 +726,7 @@ func CreateNewA(commsKey []byte, commsChannel []byte, personalFirstKey []byte) (
 	}
 	return protectedAStruct, nil
 }
-func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, err error) {
+func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsernamesUUID uuid.UUID, err error) {
 	/*
 	   type CommunicationsChannel struct {
 	       FileKey    []byte //randomly generated key which will change in revocation
@@ -741,74 +740,86 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, err error) {
 	fileKey := userlib.Argon2Key(fileSourceKey, fileSalt, 16)
 	encryptionFileKey, err := ConstructKey("encryption for fileStruct", "could not create encryption key for file struct", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	macFileKey, err := ConstructKey("mac for fileStruct", "could not create mac key for file struct", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	protectedFileKey, err := EncThenMac(encryptionFileKey, macFileKey, fileKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	randomUUID := uuid.New()
 	byteRandomUUID, err := json.Marshal(randomUUID)
 	if err != nil {
-		return nil, errors.New("could not marshal random UUID to hide file")
+		return nil, uuid.Nil, errors.New("could not marshal random UUID to hide file")
 	}
 	encryptionFileUUID, err := ConstructKey("encryption for file UUID", "could not created encryption key for the file UUID", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	macFileUUID, err := ConstructKey("mac for file UUID", "could not create mac key for the fille UUID", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	protectedFileUUID, err := EncThenMac(encryptionFileUUID, macFileUUID, byteRandomUUID)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	byteRandomCommsUUID := userlib.RandomBytes(16)
-	stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
-	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
+	byteRandomCommsUUIDKey, err := ConstructKey("sharedUser uuidKey", "could not create key for storing usernames", personalFirstKey)
 	if err != nil {
-		return nil, errors.New("could not marshal randomCommsUUID")
+		return nil, uuid.Nil, err
 	}
+	byteUsernameUUID := userlib.Argon2Key(byteRandomCommsUUIDKey, byteRandomCommsUUID, 16) //create uuid here that maps to usernames
+	usernameUUID, err := uuid.FromBytes(byteUsernameUUID)
+	if err != nil {
+		return nil, uuid.Nil, errors.New("could not convert the fancy randoms to a username uuid")
+	}
+	RecipientUsernamesUUID = usernameUUID
+
+	/*stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
+	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
+
+	if err != nil {
+		return nil, uuid.Nil, errors.New("could not marshal randomCommsUUID")
+	}*/
 	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	macRandomCommsUUID, err := ConstructKey("mac for random comms", "could not create mac key for the comms UUID", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
-	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteStringRandomComms)
+	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteUsernameUUID)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 
 	ownerCC.FileKey = protectedFileKey
 	ownerCC.FileStruct = protectedFileUUID
-	ownerCC.SharingLocation = protectedBaseCommsUUID
+	ownerCC.SharingBytes = protectedBaseCommsUUID //where the users comms channel will be but will be salted with their username and file name and stuff
 
 	bytesOwnerCC, err := json.Marshal(ownerCC)
 	if err != nil {
-		return nil, errors.New("could not marshal the owner's communication node")
+		return nil, uuid.Nil, errors.New("could not marshal the owner's communication node")
 	}
 	encryptionCCStructKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CCA struct", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 	macCCStructKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CCA struct", personalFirstKey)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
 
 	protectedOwnerCC, err := EncThenMac(encryptionCCStructKey, macCCStructKey, bytesOwnerCC)
 	if err != nil {
-		return nil, err
+		return nil, uuid.Nil, err
 	}
-	return protectedOwnerCC, nil
+	return protectedOwnerCC, RecipientUsernamesUUID, nil
 }
 func AccessCC(ccKey []byte, protectedCC []byte) (FileKey []byte, FileStructUUID uuid.UUID, randomCommsUUID string, err error) {
 	//ccKey for the owner is through getKeyFileName
@@ -852,7 +863,7 @@ func AccessCC(ccKey []byte, protectedCC []byte) (FileKey []byte, FileStructUUID 
 		return nil, uuid.Nil, "", errors.New("could not unmarshal File uuid")
 	}
 	FileStructUUID = tempFileStructUUID
-	protectedBaseCommsUUID := CC.SharingLocation
+	protectedBaseCommsUUID := CC.SharingBytes
 	decryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", ccKey)
 	if err != nil {
 		return nil, uuid.Nil, "", err
@@ -1198,21 +1209,21 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 		return uuid.Nil, nil, nil, err
 	}
 	//not actually gonna be used by recipients tho
-	byteRandomCommsUUID := userlib.RandomBytes(16)
-	stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
+	byteRandomCommsUUID := make([]byte, 0)
+	/*stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
 	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
 	if err != nil {
 		return uuid.Nil, nil, nil, errors.New("could not marshal randomCommsUUID")
-	}
-	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", personalFirstKey)
+	} */
+	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", ccKey)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	macRandomCommsUUID, err := ConstructKey("mac for random comms", "could not create mac key for the comms UUID", personalFirstKey)
+	macRandomCommsUUID, err := ConstructKey("mac for random comms", "could not create mac key for the comms UUID", ccKey)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteStringRandomComms)
+	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteRandomCommsUUID)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
@@ -1530,10 +1541,13 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		return nil
 	}
 	// doesnt exist yet
-	protectedNewCC, err := CreateNewCC(personalFirstKey)
+	//put an empty array into data store to represent all the usernames
+	protectedNewCC, userNameUUID, err := CreateNewCC(personalFirstKey)
 	if err != nil {
 		return err
 	}
+
+	//putting the owner's CC into data store for future access
 	userlib.DatastoreSet(personalFirstUUID, protectedNewCC)
 	fileKey, fileStructUUID, _, err := AccessCC(personalFirstKey, protectedNewCC)
 	if err != nil {
@@ -1543,6 +1557,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
+	//putting the file into data store with the file struct and file uuid
 	userlib.DatastoreSet(fileStructUUID, protectedFileStruct)
 	_, contentStart, err := AccessFile(protectedFileStruct, fileKey)
 	if err != nil {
@@ -1552,7 +1567,28 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
+
 	return nil
+}
+func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
+	//takes in the usernames
+	return nil, nil
+}
+func RestoreUsernames(protectedUsernames []byte, sharingByte []byte, personalFirstKey []byte) (usernames []byte, err error) {
+	return nil, nil
+}
+func RestoreUsernamesUUID(personalFirstKey []byte, sharingBytes []byte) (usernamesUUID uuid.UUID, err error) {
+	byteRandomCommsUUIDKey, err := ConstructKey("sharedUser uuidKey", "could not create key for storing usernames", personalFirstKey)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	byteUsernameUUID := userlib.Argon2Key(byteRandomCommsUUIDKey, sharingBytes, 16) //create uuid here that maps to usernames
+	usernameUUID, err := uuid.FromBytes(byteUsernameUUID)
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert the fancy randoms to a username uuid")
+	}
+
+	return usernameUUID, nil
 }
 
 func (userdata *User) AppendToFile(filename string, content []byte) error {
