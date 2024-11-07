@@ -1198,7 +1198,8 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	}
 	return communicationLocation, protectedRecipientCC, ccKey, nil
 }
-func CreateInvitation(commsKey []byte, CommunicationsChannel uuid.UUID)
+
+//func CreateInvitation(commsKey []byte, CommunicationsChannel uuid.UUID)
 
 /*----------Create Invitation ----------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {

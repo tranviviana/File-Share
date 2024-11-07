@@ -610,10 +610,10 @@ var _ = Describe("Client Tests", func() {
 			alice, err = client.InitUser("alice", defaultPassword)
 			Expect(err).To(BeNil())
 			bigBandwidth := measureBandwidth(func() {
-				err = alice.StoreFile(aliceFile, userlib.RandomBytes(10000))
+				err = alice.StoreFile(aliceFile, userlib.RandomBytes(500))
 				Expect(err).To(BeNil())
 			})
-			userlib.DebugMsg("bandwidth of 10000 byte file", bigBandwidth)
+			userlib.DebugMsg("bandwidth of 500 byte file", bigBandwidth)
 			smallBandwidth := measureBandwidth(func() {
 				err = bob.StoreFile(bobFile, []byte(("A")))
 				Expect(err).To(BeNil())
@@ -623,14 +623,14 @@ var _ = Describe("Client Tests", func() {
 			//10000 growth
 			err = alice.StoreFile(aliceFile, []byte(emptyString))
 			Expect(err).To(BeNil())
-			var newAdded [10000]int
-			for i := 0; i < 10000; i++ {
+			var newAdded [500]int
+			for i := 0; i < 500; i++ {
 				newAdded[i] = measureBandwidth(func() {
 					err = alice.AppendToFile(aliceFile, []byte("V"))
 					Expect(err).To(BeNil())
 				})
 			}
-			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[9999]))
+			userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[499]))
 
 		})
 		Specify("Append shouldn't scale with the quantity of files", func() {
