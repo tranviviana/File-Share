@@ -1406,6 +1406,65 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	return protectedAStruct, nil
 
 }
+func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
+	//add username to protected list of users this file is shared to
+	//marshal username string
+	byteAddedUsername, err := json.Marshal(addedUsername)
+	if err != nil {
+		return nil, errors.New("ProtectUsernames: could not marshal addedUsername")
+	}
+	//decrypts usernames list from protected usernames list and add marshalled username
+	usernames, err := RestoreUsernames(protectedUsernames, personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	usernames = append(usernames, byteAddedUsername...)
+
+	//encrypt & mac list of username []byte again
+	encryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	macKeyUsernames, err := ConstructKey("mac key username list in DS", "could not create a unique mac key usernames", personalFirstKey)
+	if err != nil {
+		return nil, err
+
+	}
+	protectedAddedUsernames, err = EncThenMac(encryptionKeyUsernames, macKeyUsernames, usernames)
+	if err != nil {
+		return nil, err
+	}
+	return protectedAddedUsernames, err
+}
+func RestoreUsernames(protectedUsernames []byte, personalFirstKey []byte) (usernames []byte, err error) {
+	//decrypts usernames list from protectedUsernames
+	decryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	macKeyUsernames, err := ConstructKey("mac key username list in DS", "could not create a unique mac key usernames", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	usernames, err = CheckAndDecrypt(protectedUsernames, macKeyUsernames, decryptionKeyUsernames)
+	if err != nil {
+		return nil, err
+	}
+	return usernames, nil
+}
+func RestoreUsernamesUUID(personalFirstKey []byte, sharingBytes []byte) (usernamesUUID uuid.UUID, err error) {
+	byteRandomCommsUUIDKey, err := ConstructKey("sharedUser uuidKey", "could not create key for storing usernames", personalFirstKey)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	byteUsernameUUID := userlib.Argon2Key(byteRandomCommsUUIDKey, sharingBytes, 16) //create uuid here that maps to usernames
+	usernameUUID, err := uuid.FromBytes(byteUsernameUUID)
+	if err != nil {
+		return uuid.Nil, errors.New("could not convert the fancy randoms to a username uuid")
+	}
+
+	return usernameUUID, nil
+}
 
 /*----------Create Invitation ----------*/
 func InitUser(username string, password string) (userdataptr *User, err error) {
@@ -1605,65 +1664,6 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	}
 
 	return nil
-}
-func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
-	//add username to protected list of users this file is shared to
-	//marshal username string
-	byteAddedUsername, err := json.Marshal(addedUsername)
-	if err != nil {
-		return nil, errors.New("ProtectUsernames: could not marshal addedUsername")
-	}
-	//decrypts usernames list from protected usernames list and add marshalled username
-	usernames, err := RestoreUsernames(protectedUsernames, personalFirstKey)
-	if err != nil {
-		return nil, err
-	}
-	usernames = append(usernames, byteAddedUsername...)
-
-	//encrypt & mac list of username []byte again
-	encryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
-	if err != nil {
-		return nil, err
-	}
-	macKeyUsernames, err := ConstructKey("mac key username list in DS", "could not create a unique mac key usernames", personalFirstKey)
-	if err != nil {
-		return nil, err
-
-	}
-	protectedAddedUsernames, err = EncThenMac(encryptionKeyUsernames, macKeyUsernames, usernames)
-	if err != nil {
-		return nil, err
-	}
-	return protectedAddedUsernames, err
-}
-func RestoreUsernames(protectedUsernames []byte, personalFirstKey []byte) (usernames []byte, err error) {
-	//decrypts usernames list from protectedUsernames
-	decryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
-	if err != nil {
-		return nil, err
-	}
-	macKeyUsernames, err := ConstructKey("mac key username list in DS", "could not create a unique mac key usernames", personalFirstKey)
-	if err != nil {
-		return nil, err
-	}
-	usernames, err = CheckAndDecrypt(protectedUsernames, macKeyUsernames, decryptionKeyUsernames)
-	if err != nil {
-		return nil, err
-	}
-	return usernames, nil
-}
-func RestoreUsernamesUUID(personalFirstKey []byte, sharingBytes []byte) (usernamesUUID uuid.UUID, err error) {
-	byteRandomCommsUUIDKey, err := ConstructKey("sharedUser uuidKey", "could not create key for storing usernames", personalFirstKey)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	byteUsernameUUID := userlib.Argon2Key(byteRandomCommsUUIDKey, sharingBytes, 16) //create uuid here that maps to usernames
-	usernameUUID, err := uuid.FromBytes(byteUsernameUUID)
-	if err != nil {
-		return uuid.Nil, errors.New("could not convert the fancy randoms to a username uuid")
-	}
-
-	return usernameUUID, nil
 }
 
 func (userdata *User) AppendToFile(filename string, content []byte) error {
