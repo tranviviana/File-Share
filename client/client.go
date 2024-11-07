@@ -1311,13 +1311,19 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, err
 	}
+	//check size to prepare for slicing
 	if len(invitationStruct) < 512 {
 		return nil, errors.New("invitation struct too small")
 	}
+	//slice out signature from protected invitation [0-256]
 	signatureInvitation := invitationStruct[:256]
+	//slice out aes key from protected invitation [256-512]
 	encryptedAESKey := invitationStruct[256:512]
-	encryptedByteInvitation := invitationStruct[512:]
-	err = userlib.DSVerify(verificationKey, invitationStruct[:512], signatureInvitation)
+	//slice out encyrpted invitation from protected invtation[512-]
+	encryptedInvitation := invitationStruct[512:]
+	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
+	//verify signatureInvitation on the message encryptedByteInvitation (AES + encrypted Invitation) using verification key
+	err = userlib.DSVerify(verificationKey, encryptedByteInvitation, signatureInvitation)
 	if err != nil {
 		return nil, errors.New("verification failed, cannot trust that this is the right info")
 	}
