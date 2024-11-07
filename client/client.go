@@ -1283,15 +1283,19 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 		return nil, uuid.Nil, errors.New("could not marshall invitation")
 	}
 
+	//hybrid encryption (encrypt random symmetric key to encrypt actual data)
+	//generate random aes key and iv to encrypt invitation struct
 	aesKey := userlib.RandomBytes(16)
 	iv := userlib.RandomBytes(16)
 	encryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
 
+	//rsa generates public key pair, encrypting aeskey with recipient public key
 	encryptedAESKey, err := userlib.PKEEnc(recipientPKE, aesKey)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not encrypt the AES key with RSA")
 	}
 
+	//add aes and invitation together for final protected invitation
 	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
 
 	//encrypt the invitation
@@ -1327,11 +1331,13 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, errors.New("verification failed, cannot trust that this is the right info")
 	}
+	//uses rsa private key to decrypt aes
 	aesKey, err := userlib.PKEDec(privateKey, encryptedAESKey)
 	if err != nil {
 		return nil, errors.New("could not decrypt the AES key with RSA")
 	}
 
+	//uses decrypted aes to symmetric decrypt encryptedByteInvitation
 	byteInvitation := userlib.SymDec(aesKey, encryptedByteInvitation)
 
 	var invitation Invitation
