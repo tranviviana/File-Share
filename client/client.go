@@ -1298,7 +1298,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	//generate random aes key and iv to encrypt invitation struct
 	aesKey := userlib.RandomBytes(16)
 	iv := userlib.RandomBytes(16)
-	encryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
+	symEncryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
 
 	//rsa generates public key pair, encrypting aeskey with recipient public key
 	encryptedAESKey, err := userlib.PKEEnc(recipientPKE, aesKey)
@@ -1306,15 +1306,16 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 		return nil, uuid.Nil, errors.New("could not encrypt the AES key with RSA")
 	}
 
-	//add aes and invitation together for final protected invitation
-	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
+	//add aes and invitation together for final protected invitation symEncryptedinvitation (length ?) + encryptedAESKey (length 256)
+	encryptedByteInvitation := append(symEncryptedInvitation, encryptedAESKey...)
 
 	//encrypt the invitation
 	signatureInvitation, err := userlib.DSSign(signature, encryptedByteInvitation)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not sign the invitation struct")
 	}
-	protectedInvitation = append(signatureInvitation, encryptedByteInvitation...)
+	//add final protected invitation symEncryptedinvitation (length ?) + encryptedAESKey (length 256) + signatureInvitation (length 256)
+	protectedInvitation = append(encryptedByteInvitation, signatureInvitation...)
 	invitationUUID = uuid.New()
 	return protectedInvitation, invitationUUID, nil
 }
@@ -1326,28 +1327,31 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, err
 	}
-	//check size to prepare for slicing
+
+	//check size to prepare for slicing into symEncryptedinvitation (length ?) + encryptedAESKey (length 256) + signatureInvitation (length 256)
 	if len(invitationStruct) < 512 {
-		return nil, errors.New("invitation struct too small")
+		return nil, errors.New("invitation struct too small: " + strconv.Itoa(len(invitationStruct)))
 	}
-	//slice out signature from protected invitation [0-256]
-	signatureInvitation := invitationStruct[:256]
-	//slice out aes key from protected invitation [256-512]
-	encryptedAESKey := invitationStruct[256:512]
-	//slice out encyrpted invitation from protected invtation[512-]
-	encryptedInvitation := invitationStruct[512:]
+	//slice out signature from protected invitation [-256:]
+	signatureInvitation := invitationStruct[len(invitationStruct)-256:]
+	//slice out aes key from protected invitation [-512:-256]
+	encryptedAESKey := invitationStruct[len(invitationStruct)-512 : len(invitationStruct)-256]
+	//slice out encyrpted invitation from protected invtation[:-512]
+	encryptedInvitation := invitationStruct[:len(invitationStruct)-512]
 	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
+
 	//verify signatureInvitation on the message encryptedByteInvitation (AES + encrypted Invitation) using verification key
 	err = userlib.DSVerify(verificationKey, encryptedByteInvitation, signatureInvitation)
 	if err != nil {
 		return nil, errors.New("verification failed, cannot trust that this is the right info")
 	}
+
+	//symenc & rsa hybrid decryption
 	//uses rsa private key to decrypt aes
 	aesKey, err := userlib.PKEDec(privateKey, encryptedAESKey)
 	if err != nil {
 		return nil, errors.New("could not decrypt the AES key with RSA")
 	}
-
 	//uses decrypted aes to symmetric decrypt encryptedByteInvitation
 	byteInvitation := userlib.SymDec(aesKey, encryptedByteInvitation)
 
@@ -1542,7 +1546,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	}
 	// doesnt exist yet
 	//put an empty array into data store to represent all the usernames
-	protectedNewCC, userNameUUID, err := CreateNewCC(personalFirstKey)
+	protectedNewCC, _, err := CreateNewCC(personalFirstKey)
 	if err != nil {
 		return err
 	}
