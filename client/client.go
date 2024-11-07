@@ -1284,19 +1284,14 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	}
 
 	aesKey := userlib.RandomBytes(16)
-
-	// Step 2: Encrypt the invitation with AES using the generated key
-	iv := userlib.RandomBytes(16) // Generate an IV
+	iv := userlib.RandomBytes(16)
 	encryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
 
-	// Step 3: Encrypt the AES key with RSA using the recipient's public key
 	encryptedAESKey, err := userlib.PKEEnc(recipientPKE, aesKey)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not encrypt the AES key with RSA")
 	}
 
-	// Step 4: Combine encrypted AES key and encrypted invitation as final result
-	// You may want to define a struct or append both byte arrays if they need to be sent/stored together.
 	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
 
 	//encrypt the invitation
@@ -1310,7 +1305,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 }
 
 func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byte, senderUsername string, personalFirstKey []byte) (protectedAStruct []byte, err error) {
-	//make sure you deleted the uuid pointer
+	//delete invitation!!!
 	//decrypt invitation
 	_, verificationKey, err := RestoreVERIFICATIONPublic(senderUsername)
 	if err != nil {
@@ -1322,7 +1317,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	signatureInvitation := invitationStruct[:256]
 	encryptedAESKey := invitationStruct[256:512]
 	encryptedByteInvitation := invitationStruct[512:]
-	err = userlib.DSVerify(verificationKey, append(encryptedAESKey, encryptedByteInvitation...), signatureInvitation)
+	err = userlib.DSVerify(verificationKey, invitationStruct[:512], signatureInvitation)
 	if err != nil {
 		return nil, errors.New("verification failed, cannot trust that this is the right info")
 	}
@@ -1331,8 +1326,6 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 		return nil, errors.New("could not decrypt the AES key with RSA")
 	}
 
-	// Step 4: Decrypt the Invitation with AES using the decrypted AES key
-	// Since the IV is included in the AES-encrypted invitation, we can directly decrypt it
 	byteInvitation := userlib.SymDec(aesKey, encryptedByteInvitation)
 
 	var invitation Invitation
