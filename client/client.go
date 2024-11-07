@@ -1151,15 +1151,11 @@ func CreateSharedCCKey(filename string, username []byte, recipient string, rando
 	}
 	byteCollab := append(byteFilename, byteRecipient...)
 	byteCollab = append(byteCollab, username...)
-	byteRandomCommsUUID, err := json.Marshal(randomCommsUUID)
-	if err != nil {
-		return nil, uuid.Nil, errors.New("could not marshal key for recipient")
-	}
-	byteCollab = append(byteCollab, byteRandomCommsUUID...)
+	byteCollab = append(byteCollab, randomCommsUUID...)
 	sharedKey = userlib.Argon2Key(byteCollab, username, 16) //hashKDF off of this
 
 	stringRandomCommsUUID := hex.EncodeToString(randomCommsUUID)
-	byteNewLocation, err := ConstructKey(stringRandomCommsUUID, "could not generate a new uuid location", sharedKey)
+	byteNewLocation, err := ConstructKey(stringRandomCommsUUID, "could not generate a new uuid location", sharedKey) //unique location for each user off of owners random bytes, and recipient info
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
@@ -1167,7 +1163,7 @@ func CreateSharedCCKey(filename string, username []byte, recipient string, rando
 	if err != nil {
 		return nil, uuid.Nil, errors.New("byte new location was not long enough")
 	}
-	return sharedKey, communicationLocation, nil
+	return sharedKey, communicationLocation, nil //reconstruct communicationLocation when revoking
 }
 func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, username []byte, recipient string) (communicationLocation uuid.UUID, protectedRecipientCC []byte, ccKey []byte, err error) {
 	// used by owner to copy their CC struct to share with a new user
@@ -1230,7 +1226,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-
+	//putting into the recipient's CC struct
 	recipientCC.FileKey = protectedFileKey
 	recipientCC.FileStruct = protectedFileUUID
 	recipientCC.FileStruct = protectedBaseCommsUUID
@@ -1253,7 +1249,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	return communicationLocation, protectedRecipientCC, ccKey, nil
+	return communicationLocation, protectedRecipientCC, ccKey, nil //communication location will be reconstructed when revoking users
 }
 
 func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, communicationLocation uuid.UUID, ccKey []byte) (protectedInvitation []byte, invitationUUID uuid.UUID, err error) {
@@ -1272,7 +1268,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not accurately sign message")
 	}
-	protectedCCKey := append(signatureCCKey, encryptedCCKey...)
+	protectedCCKey := append(encryptedCCKey, signatureCCKey...)
 	//encrypting comms channel uuid
 	byteComms, err := json.Marshal(communicationLocation)
 	if err != nil {
@@ -1286,7 +1282,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not sign the communicaton channel")
 	}
-	protectedComms := append(signatureComms, encryptedComms...)
+	protectedComms := append(encryptedComms, signatureComms...)
 
 	var invitation Invitation
 	invitation.CommsChannel = protectedComms
@@ -1300,8 +1296,18 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	//hybrid encryption (encrypt random symmetric key to encrypt actual data)
 	//generate random aes key and iv to encrypt invitation struct
 	aesKey := userlib.RandomBytes(16)
-	iv := userlib.RandomBytes(16)
-	symEncryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
+	macAESKey, err := ConstructKey("mac key for byte invitation", "could not create a mac key for the byte invitation", aesKey)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	symProtectedInvitation, err := EncThenMac(aesKey, macAESKey, byteInvitation)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	/*
+		iv := userlib.RandomBytes(16)
+		symEncryptedInvitation := userlib.SymEnc(aesKey, iv, byteInvitation)
+	*/
 
 	//rsa generates public key pair, encrypting aeskey with recipient public key
 	encryptedAESKey, err := userlib.PKEEnc(recipientPKE, aesKey)
@@ -1310,7 +1316,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	}
 
 	//add aes and invitation together for final protected invitation symEncryptedinvitation (length ?) + encryptedAESKey (length 256)
-	encryptedByteInvitation := append(symEncryptedInvitation, encryptedAESKey...)
+	encryptedByteInvitation := append(symProtectedInvitation, encryptedAESKey...)
 
 	//encrypt the invitation
 	signatureInvitation, err := userlib.DSSign(signature, encryptedByteInvitation)
@@ -1333,7 +1339,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 
 	//check size to prepare for slicing into symEncryptedinvitation (length ?) + encryptedAESKey (length 256) + signatureInvitation (length 256)
 	if len(invitationStruct) < 512 {
-		return nil, errors.New("invitation struct too small: " + strconv.Itoa(len(invitationStruct)))
+		return nil, errors.New("invitation struct too small ") // + strconv.Itoa(len(invitationStruct)) returns the size of the struct, we dont want this theoretically beacuse it pours info about our stuff
 	}
 	//slice out signature from protected invitation [-256:]
 	signatureInvitation := invitationStruct[len(invitationStruct)-256:]
@@ -1356,17 +1362,25 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 		return nil, errors.New("could not decrypt the AES key with RSA")
 	}
 	//uses decrypted aes to symmetric decrypt encryptedByteInvitation
-	byteInvitation := userlib.SymDec(aesKey, encryptedByteInvitation)
+	macAESKey, err := ConstructKey("mac key for byte invitation", "could not create a mac key for the byte invitation", aesKey)
+	if err != nil {
+		return nil, err
+	}
+	byteInvitation, err := CheckAndDecrypt(encryptedAESKey, macAESKey, aesKey)
+	if err != nil {
+		return nil, err
+	}
 
 	var invitation Invitation
 	err = json.Unmarshal(byteInvitation, &invitation)
 	if err != nil {
 		return nil, errors.New("could not unmarshal byte invitation ")
 	}
-	//un encrypting the componenets
+	//decrypting the componenets
 	protectedCommsChannel := invitation.CommsChannel
-	encryptedCC := protectedCommsChannel[256:]
-	signatureCC := protectedCommsChannel[:256]
+	//cc location
+	encryptedCC := protectedCommsChannel[:256]
+	signatureCC := protectedCommsChannel[256:]
 	err = userlib.DSVerify(verificationKey, encryptedCC, signatureCC)
 	if err != nil {
 		return nil, errors.New("verification failed in retrieving location, cannot trust")
@@ -1375,9 +1389,10 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, errors.New("problem with decrypting CC location")
 	}
+	//cc key
 	protectedCCKey := invitation.CommsKey
-	encryptedCCKey := protectedCCKey[256:]
-	signatureCCKey := protectedCCKey[:256]
+	encryptedCCKey := protectedCCKey[:256]
+	signatureCCKey := protectedCCKey[256:]
 	err = userlib.DSVerify(verificationKey, encryptedCCKey, signatureCCKey)
 	if err != nil {
 		return nil, errors.New("verification failed in retrieving key, cannot trust")
@@ -1386,6 +1401,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, errors.New("could not decrypt CC key")
 	}
+	//type problem here? jk cuz ACCESS A decrypts the byte cc and unmarshals it for us
 	protectedAStruct, err = CreateNewA(ccKey, byteCC, personalFirstKey)
 	if err != nil {
 		return nil, err
@@ -1579,17 +1595,19 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 }
 func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
 	//takes in the usernames
-	usernames := userlib.SymDec(personalFirstKey, protectedUsernames)
-	byteAddedUsername, err := json.Marshal(addedUsername)
-	if err != nil {
-		return nil, errors.New("in ProtectUsernames: could not marshal added username")
-	}
-	hashedAddedUsername := userlib.Hash(byteAddedUsername)
-	usernames = append(usernames, hashedAddedUsername...)
+	/*
+		usernames := userlib.SymDec(personalFirstKey, protectedUsernames)
+		byteAddedUsername, err := json.Marshal(addedUsername)
+		if err != nil {
+			return nil, errors.New("in ProtectUsernames: could not marshal added username")
+		}
+		hashedAddedUsername := userlib.Hash(byteAddedUsername)
+		usernames = append(usernames, hashedAddedUsername...)
 
-	IV := userlib.RandomBytes(16)
-	protectedAddedUsernames = userlib.SymEnc(personalFirstKey, IV, usernames)
-	return protectedAddedUsernames, nil
+		IV := userlib.RandomBytes(16)
+		protectedAddedUsernames = userlib.SymEnc(personalFirstKey, IV, usernames)
+		return protectedAddedUsernames, nil */
+	return nil, nil
 }
 func RestoreUsernames(protectedUsernames []byte, sharingByte []byte, personalFirstKey []byte) (usernames []byte, err error) {
 	return nil, nil
