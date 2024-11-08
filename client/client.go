@@ -769,23 +769,11 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 		return nil, uuid.Nil, err
 	}
 	byteRandomCommsUUID := userlib.RandomBytes(16)
-	byteRandomCommsUUIDKey, err := ConstructKey("sharedUser uuidKey", "could not create key for storing usernames", personalFirstKey)
+	usernameUUID, err := RestoreUsernamesUUID(personalFirstKey, byteRandomCommsUUID)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	byteUsernameUUID := userlib.Argon2Key(byteRandomCommsUUIDKey, byteRandomCommsUUID, 16) //create uuid here that maps to usernames
-	usernameUUID, err := uuid.FromBytes(byteUsernameUUID)
-	if err != nil {
-		return nil, uuid.Nil, errors.New("could not convert the fancy randoms to a username uuid")
-	}
 	RecipientUsernamesUUID = usernameUUID
-
-	/*stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
-	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
-
-	if err != nil {
-		return nil, uuid.Nil, errors.New("could not marshal randomCommsUUID")
-	}*/
 	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", personalFirstKey)
 	if err != nil {
 		return nil, uuid.Nil, err
@@ -794,7 +782,7 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteUsernameUUID)
+	protectedBaseCommsUUID, err := EncThenMac(encryptionRandomCommsUUID, macRandomCommsUUID, byteRandomCommsUUID)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
@@ -1622,6 +1610,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	}
 	// doesnt exist yet
 	//put an empty array into data store to represent all the usernames
+	//new CC is the OWNERS cc
 	protectedNewCC, recipientsUsernameUUID, err := CreateNewCC(personalFirstKey)
 	if err != nil {
 		return err
@@ -1924,5 +1913,6 @@ func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid
 }
 
 func (userdata *User) RevokeAccess(filename string, recipientUsername string) error {
+
 	return nil
 }

@@ -386,9 +386,10 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Getting alice with the wrong password")
 			alice, err = client.GetUser("alice", "not the right password")
-			Expect(err).To(BeNil())
+			Expect(err).To(Not(BeNil()))
 			bob, err = client.GetUser("alice", defaultPassword2)
-			Expect(bob).To(Equal(alice))
+			//check that data store hasn't changed?
+			Expect(err).To(BeNil())
 
 			userlib.DebugMsg("Initializing user bob with the same password")
 			bob, err = client.InitUser("bob", defaultPassword2)
