@@ -755,8 +755,8 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	randomUUID := uuid.New()
-	byteRandomUUID, err := json.Marshal(randomUUID)
+	fileStructUUID := uuid.New()
+	byteFileUUID, err := json.Marshal(fileStructUUID)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not marshal random UUID to hide file")
 	}
@@ -768,12 +768,12 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	protectedFileUUID, err := EncThenMac(encryptionFileUUID, macFileUUID, byteRandomUUID)
+	protectedFileUUID, err := EncThenMac(encryptionFileUUID, macFileUUID, byteFileUUID)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	byteRandomCommsUUID := userlib.RandomBytes(16)
-	usernameUUID, err := RestoreUsernamesUUID(personalFirstKey, byteRandomCommsUUID)
+	randomCommsUUID := userlib.RandomBytes(16)
+	usernameUUID, err := RestoreUsernamesUUID(personalFirstKey, randomCommsUUID)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
@@ -795,7 +795,7 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 	ownerCC.FileStruct = protectedFileUUID
 	ownerCC.SharingBytes = protectedBaseCommsUUID //where the users comms channel will be but will be salted with their username and file name and stuff
 
-	bytesOwnerCC, err := json.Marshal(ownerCC)
+	byteCC, err := json.Marshal(ownerCC)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not marshal the owner's communication node")
 	}
@@ -808,36 +808,36 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 		return nil, uuid.Nil, err
 	}
 
-	protectedOwnerCC, err := EncThenMac(encryptionCCStructKey, macCCStructKey, bytesOwnerCC)
+	protectedNewCC, err = EncThenMac(encryptionCCStructKey, macCCStructKey, byteCC)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	return protectedOwnerCC, RecipientUsernamesUUID, nil
+	return protectedNewCC, RecipientUsernamesUUID, nil
 }
-func AccessCC(ccKey []byte, protectedCC []byte) (FileKey []byte, FileStructUUID uuid.UUID, randomCommsUUID []byte, err error) {
+func AccessCC(ccKey []byte, protectedNewCC []byte) (fileKey []byte, fileStructUUID uuid.UUID, randomCommsUUID []byte, err error) {
 	//ccKey for the owner is through getKeyFileName
 	//ccKey for non-owners is through their accepted struct
 
 	//unencrypt CC channel
-	testEncryptionCCStructKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CC struct", ccKey)
+	decryptionCCStructKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CC struct", ccKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	testMacCCStructKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CC struct", ccKey)
+	macCCStructKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CC struct", ccKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	byteCC, err := CheckAndDecrypt(protectedCC, testMacCCStructKey, testEncryptionCCStructKey)
+	byteCC, err := CheckAndDecrypt(protectedNewCC, macCCStructKey, decryptionCCStructKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	var CC CommunicationsChannel
-	err = json.Unmarshal(byteCC, &CC)
+	var ownerCC CommunicationsChannel
+	err = json.Unmarshal(byteCC, &ownerCC)
 	if err != nil {
 		return nil, uuid.Nil, nil, errors.New("could not unmarshal communications struct")
 	}
 	//unencrypt and return the contents of the CC channel File UUID
-	protectedFileUUID := CC.FileStruct
+	protectedFileUUID := ownerCC.FileStruct
 	decryptionFileUUID, err := ConstructKey("encryption for file UUID", "could not created encryption key for the file UUID", ccKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
@@ -850,13 +850,12 @@ func AccessCC(ccKey []byte, protectedCC []byte) (FileKey []byte, FileStructUUID 
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	var tempFileStructUUID uuid.UUID
-	err = json.Unmarshal(byteFileUUID, &tempFileStructUUID)
+
+	err = json.Unmarshal(byteFileUUID, &fileStructUUID)
 	if err != nil {
 		return nil, uuid.Nil, nil, errors.New("could not unmarshal File uuid")
 	}
-	FileStructUUID = tempFileStructUUID
-	protectedBaseCommsUUID := CC.SharingBytes
+	protectedBaseCommsUUID := ownerCC.SharingBytes
 	decryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", ccKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
@@ -869,16 +868,7 @@ func AccessCC(ccKey []byte, protectedCC []byte) (FileKey []byte, FileStructUUID 
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	/*
-		var tempRandomComms string
-		err = json.Unmarshal(byteRandomCommsUUID, &tempRandomComms)
-		if err != nil {
-			return nil, uuid.Nil, "", errors.New("could not unmarshall comms uuid string")
-		}
-		randomCommsUUID = tempRandomComms*/
-
-	//unencrypt and return the contents of the CC channel File Key
-	protectedFileKey := CC.FileKey
+	protectedFileKey := ownerCC.FileKey
 	decryptionFileKey, err := ConstructKey("encryption for fileStruct", "could not create encryption key for file struct", ccKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
@@ -887,11 +877,11 @@ func AccessCC(ccKey []byte, protectedCC []byte) (FileKey []byte, FileStructUUID 
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	FileKey, err = CheckAndDecrypt(protectedFileKey, macFileKey, decryptionFileKey)
+	fileKey, err = CheckAndDecrypt(protectedFileKey, macFileKey, decryptionFileKey)
 	if err != nil {
 		return nil, uuid.Nil, nil, err
 	}
-	return FileKey, FileStructUUID, randomCommsUUID, err
+	return fileKey, fileStructUUID, randomCommsUUID, err
 }
 func AccessA(personalFirstKey []byte, protectedAstruct []byte) (CommsKey []byte, CommsChannel uuid.UUID, err error) {
 	//getting the a struct
@@ -1400,6 +1390,9 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, protectedInvitation []
 	ccKey, err := userlib.PKEDec(privateKey, encryptedCCKey)
 	if err != nil {
 		return nil, errors.New("could not decrypt CC key")
+	}
+	if len(ccKey) != 16 {
+		return nil, errors.New("recovered cckey wrong length")
 	}
 	//type problem here? jk cuz ACCESS A decrypts the byte cc and unmarshals it for us
 	protectedAStruct, err = CreateNewA(ccKey, byteCC, personalFirstKey)
