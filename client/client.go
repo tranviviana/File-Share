@@ -1351,7 +1351,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, err
 	}
-	byteInvitation, err := CheckAndDecrypt(encryptedAESKey, macAESKey, aesKey)
+	byteInvitation, err := CheckAndDecrypt(encryptedInvitation, macAESKey, aesKey)
 	if err != nil {
 		return nil, err
 	}
