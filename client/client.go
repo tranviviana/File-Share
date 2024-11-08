@@ -1332,7 +1332,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	encryptedAESKey := invitationStruct[len(invitationStruct)-512 : len(invitationStruct)-256]
 	//slice out encyrpted invitation from protected invtation[:-512]
 	encryptedInvitation := invitationStruct[:len(invitationStruct)-512]
-	encryptedByteInvitation := append(encryptedAESKey, encryptedInvitation...)
+	encryptedByteInvitation := append(encryptedInvitation, encryptedAESKey...)
 
 	//verify signatureInvitation on the message encryptedByteInvitation (AES + encrypted Invitation) using verification key
 	err = userlib.DSVerify(verificationKey, encryptedByteInvitation, signatureInvitation)
@@ -1393,7 +1393,6 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	}
 
 	return protectedAStruct, nil
-
 }
 func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
 	//add username to protected list of users this file is shared to
