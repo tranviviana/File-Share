@@ -604,7 +604,7 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 /*--------------File is new----------*/
 /*--------------First Check Point (Owner == CC struct) (Recipient == A Struct)-----*/
 func GetKeyFileName(filename string, hashedPasswordKDF []byte, username []byte) (personalFirstKey []byte, personalFirstUUID uuid.UUID, protectedFilename []byte, err error) {
-	//returns the communications key of the owner OR the accepted key of the recipient
+	//returns the communications key of the owner OR the accepted key of the recipient along with its uuid
 	byteFilename, err := json.Marshal(filename)
 	if err != nil {
 		return nil, uuid.Nil, nil, errors.New("could not marshal filename")
@@ -1926,7 +1926,7 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 	}
 	protectedCCA, ok := userlib.DatastoreGet(personalFirstUUID)
 	if !ok {
-		return errors.New("File not in name space")
+		return errors.New("file not in name space")
 	}
 	owner, err := IsCC(protectedCCA, personalFirstKey)
 	if err != nil {
@@ -1960,12 +1960,13 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 		return errors.New("user was not shared to")
 	}
 
-	// check the recipeint exists
-	// check the file name exists in the person's name space
-	// chekc that they are the owner
-	//if owner --> get username list and check person is in user name list
-	// reconstruct receiptience comm channel
-	// datastore delete that channel
+	_, revokedUsersUUID, err := CreateSharedCCKey(filename, userdata.username, recipientUsername, randomCommsUUID)
+	if err != nil {
+		return err
+	}
+	//removing the revoked user's node and everyone that follows it ...
+	userlib.DatastoreDelete(revokedUsersUUID)
+
 	//construct get all of the old content and delete all of the old uuid
 	// create new file and update all comms channels
 	return nil
