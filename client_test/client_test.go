@@ -15,17 +15,13 @@ import (
 	_ "errors"
 	"fmt"
 	"strconv"
-	_ "strconv"
 	"strings"
-	_ "strings"
 	"testing"
-
-	"github.com/google/uuid"
-	_ "github.com/google/uuid"
 
 	// A "dot" import is used here so that the functions in the ginko and gomega
 	// modules can be used without an identifier. For example, Describe() and
 	// Expect() instead of ginko.Describe() and gomega.Expect().
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -491,6 +487,7 @@ var _ = Describe("Client Tests", func() {
 			err = CodaBot.AcceptInvitation("EvanBot", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
 			CodaBotLoadFile, err := CodaBot.LoadFile("snacks.txt")
+			Expect(err).To(BeNil())
 			Expect(CodaBotLoadFile).To(BeEquivalentTo("eggs"))
 
 			EvanBotLoadFile, err := EvanBot.LoadFile("foods.txt")
