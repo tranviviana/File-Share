@@ -664,14 +664,12 @@ func IsCC(protectedCCA []byte, personalFirstKey []byte) (owner bool, err error) 
 	var CCAddress CommunicationsChannel
 	err = json.Unmarshal(ByteCCAAddress, &CCAddress)
 	if err != nil {
-		var AAddress Accepted
-		err = json.Unmarshal(ByteCCAAddress, &AAddress)
-		if err != nil {
-			return false, errors.New("could not unmarshal CommunicationsChannel and Acceptance struct")
-		}
-		return false, nil
+		return false, err
 	}
-	return true, nil
+	if CCAddress.FileKey != nil && CCAddress.FileStruct != nil && CCAddress.SharingBytes != nil {
+		return true, nil
+	}
+	return false, nil
 }
 func CreateNewA(commsKey []byte, commsChannel []byte, personalFirstKey []byte) (protectedAStruct []byte, err error) {
 	//used to create a personal acceptance struct
