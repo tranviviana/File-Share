@@ -1581,10 +1581,12 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		var fileStructUUID uuid.UUID
 		if owner {
 			// owner's file and already exists
-			fileKey, fileStructUUID, _, err = AccessCC(personalFirstKey, protectedFirstEntrance)
+			tempFileKey, tempFileStructUUID, _, err := AccessCC(personalFirstKey, protectedFirstEntrance)
 			if err != nil {
 				return err
 			}
+			fileKey = tempFileKey
+			fileStructUUID = tempFileStructUUID
 		} else {
 			// not owners file but already exists
 			commsKey, commsUUID, err := AccessA(personalFirstKey, protectedFirstEntrance)
@@ -1595,10 +1597,12 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 			if !ok {
 				return errors.New("File does not exist or you have been revoked, stop accessing me")
 			}
-			fileKey, fileStructUUID, _, err = AccessCC(commsKey, protectedRCC)
+			tempFileKey, tempFileStructUUID, _, err := AccessCC(commsKey, protectedRCC)
 			if err != nil {
 				return err
 			}
+			fileKey = tempFileKey
+			fileStructUUID = tempFileStructUUID
 		}
 		protectedFile, ok := userlib.DatastoreGet(fileStructUUID)
 		if !ok {
@@ -1685,10 +1689,12 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 	var fileStructUUID uuid.UUID
 	if owner {
 		//first entrance is then the CC channel
-		fileKey, fileStructUUID, _, err = AccessCC(personalFirstKey, protectedFirstEntrance)
+		tempFileKey, tempFileStructUUID, _, err := AccessCC(personalFirstKey, protectedFirstEntrance)
 		if err != nil {
 			return err
 		}
+		fileKey = tempFileKey
+		fileStructUUID = tempFileStructUUID
 	} else {
 		// not the owner so accepted channel -> cc channel -> file struct
 		commsKey, commsChannelUUID, err := AccessA(personalFirstKey, protectedFirstEntrance)
@@ -1699,10 +1705,12 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 		if !ok {
 			return errors.New("access has been revoked or file does not exist in namespace")
 		}
-		fileKey, fileStructUUID, _, err = AccessCC(commsKey, protectedCommsStruct)
+		tempFileKey, tempFileStructUUID, _, err := AccessCC(commsKey, protectedCommsStruct)
 		if err != nil {
 			return err
 		}
+		fileKey = tempFileKey
+		fileStructUUID = tempFileStructUUID
 	}
 	protectedFile, ok := userlib.DatastoreGet(fileStructUUID)
 	if !ok {
