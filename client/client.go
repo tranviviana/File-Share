@@ -1246,33 +1246,34 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 		CommsKey     []byte //key Argon2key(filename,owner,direct recipient) for the communications channel --> marshaled --> RSA Encrypted --> Rsa Signed
 		CommsChannel []byte //UUID of the commschannel RSA encrypted and signed
 	}*/
-	//encrypting comms key and signing it
+	//encrypting comms key and signing it len 256
 	encryptedCCKey, err := userlib.PKEEnc(recipientPKE, ccKey)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not encrypt ccKey")
 	}
+	//signature len 256
 	signatureCCKey, err := userlib.DSSign(signature, encryptedCCKey)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not accurately sign message")
 	}
 	protectedCCKey := append(encryptedCCKey, signatureCCKey...)
 	//encrypting comms channel uuid
-	byteComms, err := json.Marshal(communicationLocation)
+	byteCC, err := json.Marshal(communicationLocation)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not marshal comms channel uuid")
 	}
-	encryptedComms, err := userlib.PKEEnc(recipientPKE, byteComms)
+	encryptedCC, err := userlib.PKEEnc(recipientPKE, byteCC)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not encrypt the communications channel")
 	}
-	signatureComms, err := userlib.DSSign(signature, encryptedComms)
+	signatureCC, err := userlib.DSSign(signature, encryptedCC)
 	if err != nil {
 		return nil, uuid.Nil, errors.New("could not sign the communicaton channel")
 	}
-	protectedComms := append(encryptedComms, signatureComms...)
+	protectedCommsChannel := append(encryptedCC, signatureCC...)
 
 	var invitation Invitation
-	invitation.CommsChannel = protectedComms
+	invitation.CommsChannel = protectedCommsChannel
 	invitation.CommsKey = protectedCCKey
 
 	byteInvitation, err := json.Marshal(invitation)
@@ -1312,7 +1313,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	return protectedInvitation, invitationUUID, nil
 }
 
-func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byte, senderUsername string, personalFirstKey []byte) (protectedAStruct []byte, err error) {
+func DecryptInvitation(privateKey userlib.PrivateKeyType, protectedInvitation []byte, senderUsername string, personalFirstKey []byte) (protectedAStruct []byte, err error) {
 	//delete invitation!!!
 	//decrypt invitation
 	_, verificationKey, err := RestoreVERIFICATIONPublic(senderUsername)
@@ -1321,16 +1322,16 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	}
 
 	//check size to prepare for slicing into symEncryptedinvitation (length ?) + encryptedAESKey (length 256) + signatureInvitation (length 256)
-	if len(invitationStruct) < 512 {
-		return nil, errors.New("invitation struct too small ") // + strconv.Itoa(len(invitationStruct)) returns the size of the struct, we dont want this theoretically beacuse it pours info about our stuff
+	if len(protectedInvitation) < 512 {
+		return nil, errors.New("invitation struct too small ")
 	}
 	//slice out signature from protected invitation [-256:]
-	signatureInvitation := invitationStruct[len(invitationStruct)-256:]
+	signatureInvitation := protectedInvitation[len(protectedInvitation)-256:]
 	//slice out aes key from protected invitation [-512:-256]
-	encryptedAESKey := invitationStruct[len(invitationStruct)-512 : len(invitationStruct)-256]
+	encryptedAESKey := protectedInvitation[len(protectedInvitation)-512 : len(protectedInvitation)-256]
 	//slice out encyrpted invitation from protected invtation[:-512]
-	encryptedInvitation := invitationStruct[:len(invitationStruct)-512]
-	encryptedByteInvitation := append(encryptedInvitation, encryptedAESKey...)
+	symProtectedInvitation := protectedInvitation[:len(protectedInvitation)-512]
+	encryptedByteInvitation := append(symProtectedInvitation, encryptedAESKey...)
 
 	//verify signatureInvitation on the message encryptedByteInvitation (AES + encrypted Invitation) using verification key
 	err = userlib.DSVerify(verificationKey, encryptedByteInvitation, signatureInvitation)
@@ -1349,7 +1350,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, err
 	}
-	byteInvitation, err := CheckAndDecrypt(encryptedInvitation, macAESKey, aesKey)
+	byteInvitation, err := CheckAndDecrypt(symProtectedInvitation, macAESKey, aesKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1362,6 +1363,9 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	//decrypting the componenets
 	protectedCommsChannel := invitation.CommsChannel
 	//cc location
+	if len(protectedCommsChannel) < 512 {
+		return nil, errors.New("comms channel struct too small ")
+	}
 	encryptedCC := protectedCommsChannel[:256]
 	signatureCC := protectedCommsChannel[256:]
 	err = userlib.DSVerify(verificationKey, encryptedCC, signatureCC)
@@ -1372,8 +1376,16 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, errors.New("problem with decrypting CC location")
 	}
+	var communicationLocation uuid.UUID
+	err = json.Unmarshal(byteCC, &communicationLocation)
+	if err != nil {
+		return nil, errors.New("could not unmarshal CC location")
+	}
 	//cc key
 	protectedCCKey := invitation.CommsKey
+	if len(protectedCCKey) < 512 {
+		return nil, errors.New("protected CC key too small ")
+	}
 	encryptedCCKey := protectedCCKey[:256]
 	signatureCCKey := protectedCCKey[256:]
 	err = userlib.DSVerify(verificationKey, encryptedCCKey, signatureCCKey)
@@ -1837,10 +1849,11 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 			return uuid.Nil, err
 		}
 		//create a new copy of CC for the recipient
-		recipientCClocation, protectedRecipientCC, tempccKey, err := CreateCopyCC(protectedCC, personalFirstKey, filename, userdata.username, recipientUsername)
+		tempRecipientCClocation, protectedRecipientCC, tempccKey, err := CreateCopyCC(protectedCC, personalFirstKey, filename, userdata.username, recipientUsername)
 		if err != nil {
 			return uuid.Nil, err
 		}
+		recipientCClocation = tempRecipientCClocation
 		ccKey = tempccKey
 		//putting new communications channel in datastore
 		userlib.DatastoreSet(recipientCClocation, protectedRecipientCC)
@@ -1865,10 +1878,12 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		if !ok {
 			return uuid.Nil, errors.New("you can't be sharing this it doesnt exist")
 		}
-		ccKey, recipientCClocation, err = AccessA(personalFirstKey, protectedA)
+		tempccKey, tempRecipientCClocation, err := AccessA(personalFirstKey, protectedA)
 		if err != nil {
 			return uuid.Nil, err
 		}
+		ccKey = tempccKey
+		recipientCClocation = tempRecipientCClocation
 	}
 	//create new invitation
 	protectedInvitation, InvitationUUID, err := Invite(signatureKey, recipientPublicKey, recipientCClocation, ccKey)
