@@ -3,6 +3,7 @@ package client
 // CS 161 Project 2
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
@@ -1913,6 +1914,53 @@ func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid
 }
 
 func (userdata *User) RevokeAccess(filename string, recipientUsername string) error {
+	exist, err := CheckUserExistenceString(recipientUsername)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return errors.New("that user does not even exist")
+	}
+	personalFirstKey, personalFirstUUID, _, err := GetKeyFileName(filename, userdata.hashedPasswordKDF, userdata.username)
+	if err != nil {
+		return err
+	}
+	protectedCCA, ok := userlib.DatastoreGet(personalFirstUUID)
+	if !ok {
+		return errors.New("File not in name space")
+	}
+	owner, err := IsCC(protectedCCA, personalFirstKey)
+	if err != nil {
+		return err
+	}
+	if !owner {
+		return errors.New("cannot revoke if you are not the owner")
+	}
+	_, _, randomCommsUUID, err := AccessCC(personalFirstKey, protectedCCA)
+	if err != nil {
+		return err
+	}
+	usernamesUUID, err := RestoreUsernamesUUID(personalFirstKey, randomCommsUUID)
+	if err != nil {
+		return err
+	}
+	protectedUsernames, ok := userlib.DatastoreGet(usernamesUUID)
+	if !ok {
+		return errors.New("problem retrieving shared users")
+	}
+	usernames, err := RestoreUsernames(protectedUsernames, personalFirstKey)
+	if err != nil {
+		return err
+	}
+	//converting username to bytes to check its existence in shared people
+	revokedUser, err := json.Marshal(recipientUsername)
+	if err != nil {
+		return errors.New("could not marshal revoked user")
+	}
+	if !bytes.Contains(usernames, revokedUser) {
+		return errors.New("user was not shared to")
+	}
+
 	// check the recipeint exists
 	// check the file name exists in the person's name space
 	// chekc that they are the owner
