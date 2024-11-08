@@ -1913,6 +1913,13 @@ func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid
 }
 
 func (userdata *User) RevokeAccess(filename string, recipientUsername string) error {
-
+	// check the recipeint exists
+	// check the file name exists in the person's name space
+	// chekc that they are the owner
+	//if owner --> get username list and check person is in user name list
+	// reconstruct receiptience comm channel
+	// datastore delete that channel
+	//construct get all of the old content and delete all of the old uuid
+	// create new file and update all comms channels
 	return nil
 }
