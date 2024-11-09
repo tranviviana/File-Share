@@ -2077,6 +2077,11 @@ func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid
 	if err != nil {
 		return err
 	}
+	//checking that file name does not already exist in name space
+	_, ok = userlib.DatastoreGet(personalFirstUUID)
+	if ok {
+		return errors.New("a file already exists in that name space")
+	}
 	if len(personalFirstKey) < 16 {
 		return errors.New("personalFirstKey too short")
 	}
