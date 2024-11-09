@@ -730,7 +730,7 @@ func CreateNewA(commsKey []byte, commsChannel []byte, personalFirstKey []byte) (
 	}
 	return protectedAStruct, nil
 }
-func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsernamesUUID uuid.UUID, err error) {
+func CreateNewCC(personalFirstKey []byte, randomCommsUUID []byte) (protectedNewCC []byte, RecipientUsernamesUUID uuid.UUID, err error) {
 	/*
 	   type CommunicationsChannel struct {
 	       FileKey    []byte //randomly generated key which will change in revocation
@@ -773,7 +773,6 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
-	randomCommsUUID := userlib.RandomBytes(16)
 	usernameUUID, err := RestoreUsernamesUUID(personalFirstKey, randomCommsUUID)
 	if err != nil {
 		return nil, uuid.Nil, err
@@ -814,6 +813,72 @@ func CreateNewCC(personalFirstKey []byte) (protectedNewCC []byte, RecipientUsern
 		return nil, uuid.Nil, err
 	}
 	return protectedNewCC, RecipientUsernamesUUID, nil
+}
+func UpdateCC(personalFirstKey []byte, fileKey []byte, fileUUID []byte, oldCC []byte) (protectedUpdatedCC []byte, err error) {
+	decryptionCCStructKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CC struct", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	macCCStructKey, err := ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CC struct", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	byteCC, err := CheckAndDecrypt(oldCC, macCCStructKey, decryptionCCStructKey)
+	if err != nil {
+		return nil, err
+	}
+	var recipientCC CommunicationsChannel
+	err = json.Unmarshal(byteCC, &recipientCC)
+	if err != nil {
+		return nil, errors.New("could not unmarshal communications struct")
+	}
+	encryptionFileKey, err := ConstructKey("encryption for fileStruct", "could not create encryption key for file struct", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+
+	macFileKey, err := ConstructKey("mac for fileStruct", "could not create mac key for file struct", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	protectedFileKey, err := EncThenMac(encryptionFileKey, macFileKey, fileKey)
+	if err != nil {
+		return nil, err
+	}
+	encryptionFileUUID, err := ConstructKey("encryption for file UUID", "could not created encryption key for the file UUID", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	macFileUUID, err := ConstructKey("mac for file UUID", "could not create mac key for the fille UUID", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	protectedFileUUID, err := EncThenMac(encryptionFileUUID, macFileUUID, fileUUID)
+	if err != nil {
+		return nil, err
+	}
+	recipientCC.FileKey = protectedFileKey
+	recipientCC.FileStruct = protectedFileUUID
+
+	byteCC, err = json.Marshal(recipientCC)
+	if err != nil {
+		return nil, errors.New("could not marshal the owner's communication node")
+	}
+	encryptionCCStructKey, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for CC struct", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	macCCStructKey, err = ConstructKey("communications channel/accept struct MAC key", "could not create MAC key for CC struct", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+
+	protectedNewCC, err := EncThenMac(encryptionCCStructKey, macCCStructKey, byteCC)
+	if err != nil {
+		return nil, err
+	}
+	return protectedNewCC, nil
+
 }
 func AccessCC(ccKey []byte, protectedNewCC []byte) (fileKey []byte, fileStructUUID uuid.UUID, randomCommsUUID []byte, err error) {
 	//ccKey for the owner is through getKeyFileName
@@ -884,6 +949,7 @@ func AccessCC(ccKey []byte, protectedNewCC []byte) (fileKey []byte, fileStructUU
 	}
 	return fileKey, fileStructUUID, randomCommsUUID, err
 }
+
 func AccessA(personalFirstKey []byte, protectedAstruct []byte) (CommsKey []byte, CommsChannel uuid.UUID, err error) {
 	//getting the a struct
 	decryptionAstruct, err := ConstructKey("communications channel/accept struct encryption key", "could not create encryption key for A struct", personalFirstKey)
@@ -1335,6 +1401,7 @@ func Invite(signature userlib.PrivateKeyType, recipientPKE userlib.PKEEncKey, co
 	}
 	//add final protected invitation symEncryptedinvitation (length ?) + encryptedAESKey (length 256) + signatureInvitation (length 256)
 	protectedInvitation = append(encryptedByteInvitation, signatureInvitation...)
+
 	invitationUUID = uuid.New()
 	return protectedInvitation, invitationUUID, nil
 }
@@ -1433,6 +1500,26 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, protectedInvitation []
 
 	return protectedAStruct, nil
 }
+func ProtectUsernamesEmpty(usernames [][]byte, personalFirstKey []byte) (protectedUsernames []byte, err error) {
+	byteUsername, err := json.Marshal(usernames)
+	if err != nil {
+		return nil, errors.New("could not marshal changed usernames")
+	}
+	encryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
+	if err != nil {
+		return nil, err
+	}
+	macKeyUsernames, err := ConstructKey("mac key username list in DS", "could not create a unique mac key usernames", personalFirstKey)
+	if err != nil {
+		return nil, err
+
+	}
+	protectedUsernames, err = EncThenMac(encryptionKeyUsernames, macKeyUsernames, byteUsername)
+	if err != nil {
+		return nil, err
+	}
+	return protectedUsernames, err
+}
 func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalFirstKey []byte) (protectedAddedUsernames []byte, err error) {
 	//add username to protected list of users this file is shared to
 	//marshal username string
@@ -1445,8 +1532,12 @@ func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalF
 	if err != nil {
 		return nil, err
 	}
-	usernames = append(usernames, byteAddedUsername...)
+	usernames = append(usernames, [][]byte{byteAddedUsername}...)
 
+	byteUsername, err := json.Marshal(usernames)
+	if err != nil {
+		return nil, errors.New("could not marshal usernames")
+	}
 	//encrypt & mac list of username []byte again
 	encryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
 	if err != nil {
@@ -1457,13 +1548,13 @@ func ProtectUsernames(protectedUsernames []byte, addedUsername string, personalF
 		return nil, err
 
 	}
-	protectedAddedUsernames, err = EncThenMac(encryptionKeyUsernames, macKeyUsernames, usernames)
+	protectedAddedUsernames, err = EncThenMac(encryptionKeyUsernames, macKeyUsernames, byteUsername)
 	if err != nil {
 		return nil, err
 	}
 	return protectedAddedUsernames, err
 }
-func RestoreUsernames(protectedUsernames []byte, personalFirstKey []byte) (usernames []byte, err error) {
+func RestoreUsernames(protectedUsernames []byte, personalFirstKey []byte) (usernames [][]byte, err error) {
 	//decrypts usernames list from protectedUsernames
 	decryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
 	if err != nil {
@@ -1473,10 +1564,16 @@ func RestoreUsernames(protectedUsernames []byte, personalFirstKey []byte) (usern
 	if err != nil {
 		return nil, err
 	}
-	usernames, err = CheckAndDecrypt(protectedUsernames, macKeyUsernames, decryptionKeyUsernames)
+	byteUsername, err := CheckAndDecrypt(protectedUsernames, macKeyUsernames, decryptionKeyUsernames)
 	if err != nil {
 		return nil, err
 	}
+	var doubleUsernames [][]byte
+	err = json.Unmarshal(byteUsername, &doubleUsernames)
+	if err != nil {
+		return nil, errors.New("could not unmarshal list")
+	}
+	usernames = doubleUsernames
 	return usernames, nil
 }
 func RestoreUsernamesUUID(personalFirstKey []byte, sharingBytes []byte) (usernamesUUID uuid.UUID, err error) {
@@ -1656,22 +1753,27 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	// doesnt exist yet
 	//put an empty array into data store to represent all the usernames
 	//new CC is the OWNERS cc
-	protectedNewCC, recipientsUsernameUUID, err := CreateNewCC(personalFirstKey)
+	randomCommsUUID := userlib.RandomBytes(16)
+	protectedNewCC, recipientsUsernameUUID, err := CreateNewCC(personalFirstKey, randomCommsUUID)
 	if err != nil {
 		return err
 	}
 	//putting the created recipients Usernames into datastore
-	usernameList := make([]byte, 0)
+	usernameList := make([][]byte, 0)
 	encryptionKeyUsernames, err := ConstructKey("encryption key username list in data store", "could not create a unique encryption key usernames", personalFirstKey)
 	if err != nil {
 		return err
+	}
+	singleByteUsername, err := json.Marshal(usernameList)
+	if err != nil {
+		return errors.New("could not marshal username list")
 	}
 	macKeyUsernames, err := ConstructKey("mac key username list in DS", "could not create a unique mac key usernames", personalFirstKey)
 	if err != nil {
 		return err
 
 	}
-	protectedUsernames, err := EncThenMac(encryptionKeyUsernames, macKeyUsernames, usernameList)
+	protectedUsernames, err := EncThenMac(encryptionKeyUsernames, macKeyUsernames, singleByteUsername)
 	if err != nil {
 		return err
 	}
@@ -1758,27 +1860,9 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 	if fileLength%64 == 0 {
 		//filled that last block completely
 		currentBlock = (fileLength / 64) + 1 //currentBlock is 1 less the rounds of decryption because we use < instead of <=
-		/*if currentBlock == 0 {
-			overFlowStartingPt = contentPtr
-		} else {
-			overFlowStartingPt, err = GenerateNextUUID(contentPtr, int64(currentBlock))
-			if err != nil {
-				return err
-			}
-		}*/
 	} else {
 		//last block filled
 		//ex 65 bytes of previous content, curr block = 1
-		currentBlock = (fileLength / 64)
-		/*
-			if currentBlock == 0 {
-				overFlowStartingPt = contentPtr
-			} else {
-				overFlowStartingPt, err = GenerateNextUUID(contentPtr, int64(currentBlock))
-				if err != nil {
-					return err
-				}
-			}*/
 		oldContent, err := GetFileContent(fileKey, fileLength, contentPtr, currentBlock)
 		if err != nil {
 			return err
@@ -1913,6 +1997,7 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		_ = copy(protectedFirst, protectedCC)
 		recipientCClocation = tempRecipientCClocation
 		ccKey = tempccKey
+		//userlib.DatastoreGet(recipientCClocation) dont have to check create invitation on someone that already has access/ has had access in past
 		//putting new communications channel in datastore
 		userlib.DatastoreSet(recipientCClocation, protectedRecipientCC)
 		//adding the username into datastore
@@ -1930,6 +2015,22 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		}
 		// added the username back in
 		userlib.DatastoreSet(usernameUUID, reprotectedUsername)
+		//reversible invitation UUID
+		invitationKey, err := ConstructKey("invitation variation", "could not construct key for invitation ", byteSharingBytes)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		invitationUUID, err := uuid.FromBytes(invitationKey)
+		if err != nil {
+			return uuid.Nil, errors.New("could not make invitation uuid")
+		}
+		protectedInvitation, _, err := Invite(signatureKey, recipientPublicKey, recipientCClocation, ccKey)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		userlib.DatastoreSet(invitationUUID, protectedInvitation)
+		return invitationUUID, nil
+
 	} else {
 		acceptedUUID := personalFirstUUID
 		protectedA, ok := userlib.DatastoreGet(acceptedUUID)
@@ -1941,20 +2042,22 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 			return uuid.Nil, err
 		}
 		ccKey = tempccKey
+		//create new invitation not from the owner
+		//putting that invitation into name space and returning that for the person to use
 		recipientCClocation = tempRecipientCClocation
+		protectedInvitation, invitationUUID, err := Invite(signatureKey, recipientPublicKey, recipientCClocation, ccKey)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		userlib.DatastoreSet(invitationUUID, protectedInvitation)
+		return invitationUUID, nil
 	}
-	//create new invitation
-	protectedInvitation, InvitationUUID, err := Invite(signatureKey, recipientPublicKey, recipientCClocation, ccKey)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	//putting that invitation into name space and returning that for the person to use
-	userlib.DatastoreSet(InvitationUUID, protectedInvitation)
-
-	return InvitationUUID, nil
 }
 
 func (userdata *User) AcceptInvitation(senderUsername string, invitationPtr uuid.UUID, filename string) error {
+	if invitationPtr == uuid.Nil {
+		return errors.New("damaged uuid")
+	}
 	exist, err := CheckUserExistenceString(senderUsername)
 	if err != nil {
 		return err
@@ -2010,7 +2113,7 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 		return err
 	}
 	if !owner {
-		return errors.New("cannot revoke if you are not the owner")
+		return errors.New("cannot revoke if you are not the owner you silly butt")
 	}
 	_, _, randomCommsUUID, err := AccessCC(personalFirstKey, protectedCCA)
 	if err != nil {
@@ -2033,18 +2136,129 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 	if err != nil {
 		return errors.New("could not marshal revoked user")
 	}
-	if !bytes.Contains(usernames, revokedUser) {
-		return errors.New("user was not shared to")
+	var index = -1
+	for i, username := range usernames {
+		if bytes.Equal(username, revokedUser) {
+			// Return the index when the user is found
+			index = 1
+			if (i + 1) < len(usernames) {
+				usernames = append(usernames[:i], usernames[i+1:]...)
+			} else {
+				usernames = usernames[:i]
+			}
+			_, revokedUsersUUID, err := CreateSharedCCKey(filename, userdata.username, recipientUsername, randomCommsUUID)
+			if err != nil {
+				return err
+			}
+			//removing the revoked user's node and everyone that follows it ...
+			userlib.DatastoreDelete(revokedUsersUUID)
+		} else {
+			i++
+		}
 	}
-
-	_, revokedUsersUUID, err := CreateSharedCCKey(filename, userdata.username, recipientUsername, randomCommsUUID)
+	if index == -1 {
+		return errors.New("file wasn't shared with user")
+	}
+	//case where the person was given an invitation and hasnt accepted yet
+	invitationKey, err := ConstructKey("invitation variation", "could not construct key for invitation ", randomCommsUUID)
 	if err != nil {
 		return err
 	}
-	//removing the revoked user's node and everyone that follows it ...
-	userlib.DatastoreDelete(revokedUsersUUID)
+	invitationUUID, err := uuid.FromBytes(invitationKey)
+	if err != nil {
+		return errors.New("could not make invitation uuid")
+	}
+	userlib.DatastoreDelete(invitationUUID)
+
+	// updating the usernames list
+	//put the usernames back in
+	protectedDoubleUsernames, err := ProtectUsernamesEmpty(usernames, personalFirstKey)
+	if err != nil {
+		return err
+	}
+	userlib.DatastoreSet(usernamesUUID, protectedDoubleUsernames)
 
 	//construct get all of the old content and delete all of the old uuid
-	// create new file and update all comms channels
+	ownerCC := protectedCCA
+	fileKey, fileStructUUID, randomCommsUUID, err := AccessCC(personalFirstKey, ownerCC)
+	if err != nil {
+		return err
+	}
+	// getting content pointer
+	protectedFileStruct, ok := userlib.DatastoreGet(fileStructUUID)
+	if !ok {
+		return errors.New("filestruct doesnt exist")
+	}
+	fileLength, contentPtr, err := AccessFile(protectedFileStruct, fileKey)
+	if err != nil {
+		return err
+	}
+	content, err := userdata.LoadFile(filename)
+	if err != nil {
+		return err
+	}
+	//deleting old content blocks
+	err = RestoreSmallerFile(0, int64(fileLength), contentPtr)
+	if err != nil {
+		return err
+	}
+	//easier to just reset the owners CC then to go into it, change it, and then load it in again
+	// creates a new file uuid
+	//gonna overwrite the one in datastore
+	protectedNewCC, _, err := CreateNewCC(personalFirstKey, randomCommsUUID)
+	if err != nil {
+		return err
+	}
+	newFileKey, newFileUUID, _, err := AccessCC(personalFirstKey, protectedNewCC)
+	if err != nil {
+		return err
+	}
+	protectedNewFile, err := CreateNewFile(newFileKey, len(content))
+	if err != nil {
+		return err
+	}
+
+	_, newContentPtr, err := AccessFile(protectedNewFile, newFileKey)
+	if err != nil {
+		return err
+	}
+	//putting the file contents in
+	err = SetFileContent(newFileKey, newContentPtr, len(content), content, 0)
+	if err != nil {
+		return err
+	}
+	//putting new owner cc in
+	userlib.DatastoreSet(personalFirstUUID, protectedNewCC)
+	// putting the new file in
+	userlib.DatastoreSet(newFileUUID, protectedNewFile)
+	// deleting old file location
+	userlib.DatastoreDelete(fileStructUUID)
+
+	// update the new comms channels
+	for _, username := range usernames {
+		var stringUsername string
+		err := json.Unmarshal(username, &stringUsername)
+		if err != nil {
+			return errors.New("could not unmarshal username")
+		}
+		sharedKey, recipientUUID, err := CreateSharedCCKey(filename, userdata.username, stringUsername, randomCommsUUID)
+		if err != nil {
+			return err
+		}
+		protectedRecipientCC, ok := userlib.DatastoreGet(recipientUUID)
+		if !ok {
+			return errors.New("recipient no exist")
+		}
+		byteNewFileUUID, err := json.Marshal(newFileUUID)
+		if err != nil {
+			return errors.New("could not marshal new file uuid")
+		}
+		newRecipientCC, err := UpdateCC(sharedKey, newFileKey, byteNewFileUUID, protectedRecipientCC)
+		if err != nil {
+			return err
+		}
+		userlib.DatastoreSet(recipientUUID, newRecipientCC)
+	}
+
 	return nil
 }
