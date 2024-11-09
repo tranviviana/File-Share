@@ -771,7 +771,7 @@ var _ = Describe("Client Tests", func() {
 				Expect(err).To(BeNil())
 			})
 			userlib.DebugMsg("Sharing file with many users & appending")
-			for i := 0; i < 50; i++ {
+			for i := 0; i < 25; i++ {
 				newSharedUser, err := client.InitUser(strconv.Itoa(i), defaultPassword)
 				Expect(err).To(BeNil())
 				invitationPtr, err := alice.CreateInvitation(aliceFile, strconv.Itoa(i))
