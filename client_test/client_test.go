@@ -571,10 +571,9 @@ var _ = Describe("Client Tests", func() {
 			err = A.RevokeAccess("foods.txt", "C")
 			Expect(err).To(BeNil())
 
-			loadedFile, err := B.LoadFile("snacks.txt")
+			_, err = B.LoadFile("snacks.txt")
 			Expect(err).ToNot(BeNil())
 			//possible error here, it should just error out and not return anything
-			Expect(loadedFile).To(BeFalse())
 
 			err = D.AppendToFile("snacks.txt", []byte("this is a mistake"))
 			Expect(err).ToNot(BeNil())
@@ -981,7 +980,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 
 			userlib.DebugMsg("Accepting existing file")
-			bob.AcceptInvitation("Alice", invitationPtr, "aliceFile.txt")
+			err = bob.AcceptInvitation("Alice", invitationPtr, "aliceFile.txt")
 			Expect(err).ToNot(BeNil())
 		})
 		Specify("AcceptInvitation UUID is corrupt error", func() {
@@ -1002,7 +1001,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 
 			userlib.DebugMsg("Accepting nil uuid file")
-			bob.AcceptInvitation("Alice", uuid.Nil, "aliceFile.txt")
+			err = bob.AcceptInvitation("Alice", uuid.Nil, "aliceFile.txt")
 			Expect(err).ToNot(BeNil())
 		})
 		Specify("AcceptInvitation file is revoked error", func() {
@@ -1026,7 +1025,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 
 			userlib.DebugMsg("Accepting revoked file")
-			bob.AcceptInvitation("Alice", invitationPtr, "aliceFile.txt")
+			err = bob.AcceptInvitation("Alice", invitationPtr, "aliceFile.txt")
 			Expect(err).ToNot(BeNil())
 		})
 		Specify("RevokeInvitation filename does not exist error", func() {
