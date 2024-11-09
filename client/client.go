@@ -1156,7 +1156,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	fileKey := make([]byte, len(protectedCC))
+	fileKey := make([]byte, len(oGFileKey))
 	_ = copy(fileKey, oGFileKey)
 	randomCommsUUID := make([]byte, len(oGRandomCommsUUID))
 	_ = copy(randomCommsUUID, oGRandomCommsUUID)
@@ -1901,6 +1901,7 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		if err != nil {
 			return uuid.Nil, err
 		}
+		_ = copy(protectedFirst, protectedCC)
 		recipientCClocation = tempRecipientCClocation
 		ccKey = tempccKey
 		//putting new communications channel in datastore

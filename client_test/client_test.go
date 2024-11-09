@@ -498,7 +498,7 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			Expect(EvanBotLoadFile).To(BeEquivalentTo("eggs"))
 
-			err = EvanBot.AppendToFile("foods.txt", []byte("and bacon"))
+			err = EvanBot.AppendToFile("foods.txt", []byte(" and bacon"))
 			Expect(err).To(BeNil())
 			CodaBotLoadFile, err = CodaBot.LoadFile("snacks.txt")
 			Expect(err).To(BeNil())
