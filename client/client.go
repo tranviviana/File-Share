@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"strconv"
 
 	//"strings"
 
@@ -399,31 +398,30 @@ func ReconstructInitialize(usernameInput string, password string) (createdUUID u
 
 /*-------------------Store File Content ---------------*/
 
-func SetFileContent(fileKey []byte, contentUUID uuid.UUID, fileLength int, content []byte) (err error) {
+func SetFileContent(fileKey []byte, contentUUID uuid.UUID, fileLength int, content []byte, currentRound int) (err error) {
 	//64 block size
-
+	start := currentRound
 	currentUUID := contentUUID
 	var roundsEncryption int
 	if fileLength%64 == 0 {
-		roundsEncryption = fileLength / 64
+		roundsEncryption = (fileLength / 64) + currentRound
 	} else {
-		roundsEncryption = (fileLength / 64) + 1
+		roundsEncryption = (fileLength / 64) + 1 + currentRound
 	}
-	currentRound := 0
 	for currentRound < roundsEncryption {
 		var contentSplice []byte
 		if (currentRound+1)*64 > fileLength {
-			contentSplice = content[(currentRound * 64):]
+			contentSplice = content[((currentRound - start) * 64):]
 		} else {
-			contentSplice = content[(currentRound * 64) : (currentRound+1)*64]
+			contentSplice = content[((currentRound - start) * 64) : ((currentRound-start)+1)*64]
 		}
 		var contentBlock FileContent
-		hardCodedText := "content encryption salt" + strconv.Itoa(currentRound)
+		hardCodedText := "content encryption salt"
 		encryptionContentKey, err := ConstructKey(hardCodedText, "could not encrypt content block", fileKey)
 		if err != nil {
 			return err
 		}
-		hardCodedText = "content MAC salt" + strconv.Itoa(currentRound)
+		hardCodedText = "content MAC salt"
 		macContentKey, err := ConstructKey(hardCodedText, "could not MAC content block", fileKey)
 		if err != nil {
 			return err
@@ -439,12 +437,12 @@ func SetFileContent(fileKey []byte, contentUUID uuid.UUID, fileLength int, conte
 			return errors.New("could not marshal content struct")
 		}
 
-		hardCodedText = "content struct encryption salt" + strconv.Itoa(currentRound)
+		hardCodedText = "content struct encryption salt"
 		encryptionContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return err
 		}
-		hardCodedText = "content struct mac salt" + strconv.Itoa(currentRound)
+		hardCodedText = "content struct mac salt"
 		macContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return err
@@ -517,9 +515,9 @@ func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.
 	}
 	return nil
 }
-func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (content []byte, err error) {
+func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID, currentRound int) (content []byte, err error) {
 	currentUUID := contentStart
-
+	start := currentRound
 	// Calculate the number of blocks needed
 	var roundsDecryption int
 	if fileLength%64 == 0 {
@@ -527,7 +525,6 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 	} else {
 		roundsDecryption = (fileLength / 64) + 1
 	}
-	currentRound := 0
 
 	for currentRound < roundsDecryption {
 		// Retrieve encrypted block from datastore
@@ -537,12 +534,12 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 		}
 
 		// Reconstruct encryption and MAC keys for this block
-		hardCodedText := "content struct encryption salt" + strconv.Itoa(currentRound)
+		hardCodedText := "content struct encryption salt"
 		decryptionContentStructKey, err := ConstructKey(hardCodedText, "could not create encryption key for content struct", fileKey)
 		if err != nil {
 			return nil, err
 		}
-		hardCodedText = "content struct mac salt" + strconv.Itoa(currentRound)
+		hardCodedText = "content struct mac salt"
 		macContentStructKey, err := ConstructKey(hardCodedText, "could not create MAC key for content struct", fileKey)
 		if err != nil {
 			return nil, err
@@ -562,13 +559,13 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 		}
 
 		// Generate encryption and MAC keys for the content itself
-		hardCodedText = "content encryption salt" + strconv.Itoa(currentRound)
+		hardCodedText = "content encryption salt"
 		decryptionContentKey, err := ConstructKey(hardCodedText, "could not create encryption key for content", fileKey)
 		if err != nil {
 			return nil, err
 		}
 
-		hardCodedText = "content MAC salt" + strconv.Itoa(currentRound)
+		hardCodedText = "content MAC salt"
 		macContentKey, err := ConstructKey(hardCodedText, "could not create MAC key for content", fileKey)
 		if err != nil {
 			return nil, err
@@ -594,6 +591,10 @@ func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID) (con
 	// Trim content to the actual file length (in case of padding in the last block)
 	if len(content) > fileLength {
 		content = content[:fileLength]
+	}
+	if start != 0 {
+		//the case where we are appending
+		content = content[:(fileLength - (fileLength/64)*64)]
 	}
 
 	return content, nil
@@ -1646,7 +1647,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		if err != nil {
 			return err
 		}
-		err = SetFileContent(fileKey, contentStart, len(content), content)
+		err = SetFileContent(fileKey, contentStart, len(content), content, 0)
 		if err != nil {
 			return err
 		}
@@ -1691,7 +1692,7 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	err = SetFileContent(fileKey, contentStart, len(content), content)
+	err = SetFileContent(fileKey, contentStart, len(content), content, 0)
 	if err != nil {
 		return err
 	}
@@ -1752,31 +1753,39 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 	}
 	// add to content stuff
 	var currentBlock int
-	var overFlowStartingPt uuid.UUID
+	//var overFlowStartingPt uuid.UUID
 	newFileLength := fileLength + len(content)
 	if fileLength%64 == 0 {
 		//filled that last block completely
 		currentBlock = (fileLength / 64) + 1 //currentBlock is 1 less the rounds of decryption because we use < instead of <=
+		/*if currentBlock == 0 {
+			overFlowStartingPt = contentPtr
+		} else {
+			overFlowStartingPt, err = GenerateNextUUID(contentPtr, int64(currentBlock))
+			if err != nil {
+				return err
+			}
+		}*/
 	} else {
 		//last block filled
 		//ex 65 bytes of previous content, curr block = 1
 		currentBlock = (fileLength / 64)
-	}
-	if currentBlock == 0 {
-		overFlowStartingPt = contentPtr
-	} else {
-		overFlowStartingPt, err = GenerateNextUUID(contentPtr, int64(currentBlock))
+		/*
+			if currentBlock == 0 {
+				overFlowStartingPt = contentPtr
+			} else {
+				overFlowStartingPt, err = GenerateNextUUID(contentPtr, int64(currentBlock))
+				if err != nil {
+					return err
+				}
+			}*/
+		oldContent, err := GetFileContent(fileKey, fileLength, contentPtr, currentBlock)
 		if err != nil {
 			return err
 		}
+		content = append(oldContent, content...)
 	}
-	oldContent, err := GetFileContent(fileKey, fileLength, overFlowStartingPt)
-	if err != nil {
-		return err
-	}
-	content = append(oldContent, content...)
-
-	err = SetFileContent(fileKey, overFlowStartingPt, len(content), content)
+	err = SetFileContent(fileKey, contentPtr, len(content), content, currentBlock)
 	if err != nil {
 		return err
 	}
@@ -1844,7 +1853,7 @@ func (userdata *User) LoadFile(filename string) (content []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	content, err = GetFileContent(fileKey, fileLength, contentStart)
+	content, err = GetFileContent(fileKey, fileLength, contentStart, 0)
 	if err != nil {
 		return nil, err
 	}

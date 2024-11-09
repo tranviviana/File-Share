@@ -506,13 +506,13 @@ var _ = Describe("Client Tests", func() {
 		})
 		/*
 
-			EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
-			Datastore when creating the invitation, and what is the UUID returned? What values on
-			Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
-			in the future?
+		   EvanBot (the file owner) wants to share the file with CodaBot. What is stored in
+		   Datastore when creating the invitation, and what is the UUID returned? What values on
+		   Datastore are changed when CodaBot accepts the invitation? How does CodaBot access the file
+		   in the future?
 
-			CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
-			non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
+		   CodaBot (not the file owner) wants to share the file with PintoBot. What is the sharing process like when a
+		   non-owner shares? (Same questions as above; your answers might be the same or different depending on your design.)
 		*/
 
 		Specify("Revocation", func() {
@@ -541,28 +541,27 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).To(BeNil())
 			err = B.AcceptInvitation("A", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
-
 			invitationPtr, err = A.CreateInvitation("foods.txt", "C")
 			Expect(err).To(BeNil())
-			err = B.AcceptInvitation("C", invitationPtr, "snacks.txt")
+			err = C.AcceptInvitation("A", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
 
-			invitationPtr, err = C.CreateInvitation("foods.txt", "G")
+			invitationPtr, err = C.CreateInvitation("snacks.txt", "G")
 			Expect(err).To(BeNil())
 			err = G.AcceptInvitation("C", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
 
-			invitationPtr, err = B.CreateInvitation("foods.txt", "D")
+			invitationPtr, err = B.CreateInvitation("snacks.txt", "D")
 			Expect(err).To(BeNil())
 			err = D.AcceptInvitation("B", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
 
-			invitationPtr, err = B.CreateInvitation("foods.txt", "E")
+			invitationPtr, err = B.CreateInvitation("snacks.txt", "E")
 			Expect(err).To(BeNil())
 			err = E.AcceptInvitation("B", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
 
-			invitationPtr, err = D.CreateInvitation("foods.txt", "F")
+			invitationPtr, err = D.CreateInvitation("snacks.txt", "F")
 			Expect(err).To(BeNil())
 			err = F.AcceptInvitation("D", invitationPtr, "snacks.txt")
 			Expect(err).To(BeNil())
@@ -606,37 +605,37 @@ var _ = Describe("Client Tests", func() {
 		}
 		/*ADD testing for file adding, and for length of the file name and scaling with the size of a previous append and the number of users the file is shared with */
 		/*
-			Specify("Append shouldn't scale with size of file but by what is added", func() {
-				userlib.DebugMsg("The total bandwidth should only scale with the size of the append and not number of appends either")
-				userlib.DebugMsg("Creating a 10k byte and a 1 byte file")
-				alice, err = client.InitUser("alice", defaultPassword)
-				Expect(err).To(BeNil())
-				bigBandwidth := measureBandwidth(func() {
-					err = alice.StoreFile(aliceFile, userlib.RandomBytes(500))
-					Expect(err).To(BeNil())
-				})
-				userlib.DebugMsg("bandwidth of 50 byte file", bigBandwidth)
-				smallBandwidth := measureBandwidth(func() {
-					err = bob.StoreFile(bobFile, []byte(("A")))
-					Expect(err).To(BeNil())
-				})
-				userlib.DebugMsg("bandwidth of 1 byte file", smallBandwidth)
-				userlib.DebugMsg("Adding bytes to each file to check bandwidth")
+		   Specify("Append shouldn't scale with size of file but by what is added", func() {
+		       userlib.DebugMsg("The total bandwidth should only scale with the size of the append and not number of appends either")
+		       userlib.DebugMsg("Creating a 10k byte and a 1 byte file")
+		       alice, err = client.InitUser("alice", defaultPassword)
+		       Expect(err).To(BeNil())
+		       bigBandwidth := measureBandwidth(func() {
+		           err = alice.StoreFile(aliceFile, userlib.RandomBytes(500))
+		           Expect(err).To(BeNil())
+		       })
+		       userlib.DebugMsg("bandwidth of 50 byte file", bigBandwidth)
+		       smallBandwidth := measureBandwidth(func() {
+		           err = bob.StoreFile(bobFile, []byte(("A")))
+		           Expect(err).To(BeNil())
+		       })
+		       userlib.DebugMsg("bandwidth of 1 byte file", smallBandwidth)
+		       userlib.DebugMsg("Adding bytes to each file to check bandwidth")
 
-				err = alice.StoreFile(aliceFile, []byte(emptyString))
-				Expect(err).To(BeNil())
-				var newAdded [50]int
-				for i := 0; i < 48; i++ {
-					err = alice.AppendToFile(aliceFile, []byte("V"))
-					Expect(err).To(BeNil())
-				}
-				newAdded[49] = measureBandwidth(func() {
-					err = alice.AppendToFile(aliceFile, []byte("V"))
-					Expect(err).To(BeNil())
-				})
-				userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[49]))
+		       err = alice.StoreFile(aliceFile, []byte(emptyString))
+		       Expect(err).To(BeNil())
+		       var newAdded [50]int
+		       for i := 0; i < 48; i++ {
+		           err = alice.AppendToFile(aliceFile, []byte("V"))
+		           Expect(err).To(BeNil())
+		       }
+		       newAdded[49] = measureBandwidth(func() {
+		           err = alice.AppendToFile(aliceFile, []byte("V"))
+		           Expect(err).To(BeNil())
+		       })
+		       userlib.DebugMsg("Difference from the 0th and 9999th append: " + strconv.Itoa(newAdded[0]-newAdded[49]))
 
-			}) */
+		   }) */
 		Specify("Append shouldn't scale with the quantity of files", func() {
 			userlib.DebugMsg("Append should not scale with the number of files")
 			userlib.DebugMsg("Initializing user 1")
@@ -688,24 +687,24 @@ var _ = Describe("Client Tests", func() {
 			userlib.DebugMsg("Difference between AppendToFile where file name lengths are different: " + strconv.Itoa(bigBandwidth-smallBandwidth))
 		})
 		/*Specify("AppendToFile shouldn't scale to the size of the previous append", func() {
-			userlib.DebugMsg("Initializing user")
-			alice, err = client.InitUser("alice", defaultPassword)
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("appending to a file")
-			err = alice.StoreFile(aliceFile, []byte(empytString))
-			Expect(err).To(BeNil())
-			smallBandwidth := measureBandwidth(func() {
-				err = alice.AppendToFile(aliceFile, []byte("A"))
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("appending to a file with large previous append")
-			err = alice.AppendToFile(aliceFile, userlib.RandomBytes(10000))
-			Expect(err).To(BeNil())
-			bigBandwidth := measureBandwidth(func() {
-				err = alice.AppendToFile(aliceFile, "A")
-				Expect(err).To(BeNil())
-			})
-			userlib.DebugMsg("Difference between AppendToFile where previous append sizes are different: " + strconv.Itoa(bigBandwidth-smallBandwidth))
+		    userlib.DebugMsg("Initializing user")
+		    alice, err = client.InitUser("alice", defaultPassword)
+		    Expect(err).To(BeNil())
+		    userlib.DebugMsg("appending to a file")
+		    err = alice.StoreFile(aliceFile, []byte(empytString))
+		    Expect(err).To(BeNil())
+		    smallBandwidth := measureBandwidth(func() {
+		        err = alice.AppendToFile(aliceFile, []byte("A"))
+		        Expect(err).To(BeNil())
+		    })
+		    userlib.DebugMsg("appending to a file with large previous append")
+		    err = alice.AppendToFile(aliceFile, userlib.RandomBytes(10000))
+		    Expect(err).To(BeNil())
+		    bigBandwidth := measureBandwidth(func() {
+		        err = alice.AppendToFile(aliceFile, "A")
+		        Expect(err).To(BeNil())
+		    })
+		    userlib.DebugMsg("Difference between AppendToFile where previous append sizes are different: " + strconv.Itoa(bigBandwidth-smallBandwidth))
 		})*/
 		Specify("Append shouldn't scale with the length of the username", func() {
 			userlib.DebugMsg("AppendToFile shouldn't scale with the username")
@@ -913,17 +912,17 @@ var _ = Describe("Client Tests", func() {
 			Expect(err).ToNot(BeNil())
 		})
 		/*
-			Specify("LoadFile tampering error", func() {
-				userlib.DebugMsg("Testing LoadFile where the integrity of the downloaded content cannot be verified")
-				userlib.DebugMsg("Initializing user")
-				alice, err = client.InitUser("Alice", defaultPassword)
-				Expect(err).To(BeNil())
-				userlib.DebugMsg("Storing file")
-				err = alice.StoreFile(aliceFile, []byte(contentOne))
-				Expect(err).To(BeNil())
+		   Specify("LoadFile tampering error", func() {
+		       userlib.DebugMsg("Testing LoadFile where the integrity of the downloaded content cannot be verified")
+		       userlib.DebugMsg("Initializing user")
+		       alice, err = client.InitUser("Alice", defaultPassword)
+		       Expect(err).To(BeNil())
+		       userlib.DebugMsg("Storing file")
+		       err = alice.StoreFile(aliceFile, []byte(contentOne))
+		       Expect(err).To(BeNil())
 
-				//corrupt alicefile here
-			})
+		       //corrupt alicefile here
+		   })
 		*/
 
 		Specify("AppendToFile filename does not exist error", func() {
@@ -1062,17 +1061,17 @@ var _ = Describe("Client Tests", func() {
 	})
 	/*----------EDGE CASES------------*/
 	/* CHECK EDGE CASE ON ED STEM
-	Describe("Edge Cases", func() {
-		FSpecify("InitUser really long username and password", func() {
-			userlib.DebugMsg("Testing InitUser where there is no existing username")
-			userlib.DebugMsg("Initializing user with a new username")
-			Username := strings.Repeat("C", 20000000000)
-			Password := strings.Repeat("a", 10000)
-			EvanBot, err = client.InitUser(Username, Password)
-			Expect(err).To(BeNil())
-			userlib.DebugMsg("Gettomg user with an existing long username and existing long password")
-			CodaBot, err = client.GetUser(Username, Password)
-			Expect(err).To(BeNil())
-		})
-	})*/
+	   Describe("Edge Cases", func() {
+	       FSpecify("InitUser really long username and password", func() {
+	           userlib.DebugMsg("Testing InitUser where there is no existing username")
+	           userlib.DebugMsg("Initializing user with a new username")
+	           Username := strings.Repeat("C", 20000000000)
+	           Password := strings.Repeat("a", 10000)
+	           EvanBot, err = client.InitUser(Username, Password)
+	           Expect(err).To(BeNil())
+	           userlib.DebugMsg("Gettomg user with an existing long username and existing long password")
+	           CodaBot, err = client.GetUser(Username, Password)
+	           Expect(err).To(BeNil())
+	       })
+	   })*/
 })
