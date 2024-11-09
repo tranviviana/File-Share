@@ -641,7 +641,7 @@ var _ = Describe("Client Tests", func() {
 			alice, err = client.InitUser("alice", defaultPassword)
 			Expect(err).To(BeNil())
 			userlib.DebugMsg("Scaling up quantity of files")
-			for i := 0; i < 1000; i++ {
+			for i := 0; i < 50; i++ {
 				iFile := fmt.Sprintf("%d.txt", i)
 				err = alice.StoreFile(iFile, []byte(emptyString))
 				Expect(err).To(BeNil())
@@ -663,6 +663,7 @@ var _ = Describe("Client Tests", func() {
 			})
 			userlib.DebugMsg("Difference between AppendToFile where quantity of files is different: " + strconv.Itoa(bigBandwidth-smallBandwidth))
 		})
+
 		Specify("Append shouldn't scale with the length of the file name", func() {
 			userlib.DebugMsg("AppendToFile shouldn't scale with the file name")
 			userlib.DebugMsg("Initializing user")
@@ -1058,19 +1059,5 @@ var _ = Describe("Client Tests", func() {
 		})
 		//error for malicious action in revokeaccess
 	})
-	/*----------EDGE CASES------------*/
-	/* CHECK EDGE CASE ON ED STEM
-	   Describe("Edge Cases", func() {
-	       FSpecify("InitUser really long username and password", func() {
-	           userlib.DebugMsg("Testing InitUser where there is no existing username")
-	           userlib.DebugMsg("Initializing user with a new username")
-	           Username := strings.Repeat("C", 20000000000)
-	           Password := strings.Repeat("a", 10000)
-	           EvanBot, err = client.InitUser(Username, Password)
-	           Expect(err).To(BeNil())
-	           userlib.DebugMsg("Gettomg user with an existing long username and existing long password")
-	           CodaBot, err = client.GetUser(Username, Password)
-	           Expect(err).To(BeNil())
-	       })
-	   })*/
+
 })

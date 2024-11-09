@@ -517,25 +517,27 @@ func RestoreSmallerFile(newFileLength int64, oldFileLength int64, ptrStart uuid.
 	}
 	return nil
 }
-func UpdateFileLength(newFileLength int64, oldFileLength int64, ptrStart uuid.UUID, fileKey []byte, protectedFile []byte) (new_protectedFile []byte, err error) {
+func UpdateFileLength(newFileLength int64, oldFileLength int64, ptrStart uuid.UUID, fileKey []byte, protectedFile []byte) (updated int, new_protectedFile []byte, err error) {
 	//new file length is shorter than old file length
 	longerFile := oldFileLength / 64
 	shorterFile := newFileLength / 64
-	if longerFile > shorterFile {
+	new_protectedFile = protectedFile
+	if longerFile != shorterFile {
+		updated = 1
 		new_protectedFile, err = setNewFileLength(int(shorterFile), fileKey, protectedFile)
 		if err != nil {
-			return nil, err
+			return 2, nil, err
 		}
 	}
 	for longerFile > shorterFile {
 		deletableUUID, err := GenerateNextUUID(ptrStart, longerFile)
 		if err != nil {
-			return nil, err
+			return 2, nil, err
 		}
 		userlib.DatastoreDelete(deletableUUID)
 		longerFile -= 1
 	}
-	return new_protectedFile, nil
+	return updated, new_protectedFile, nil
 }
 func GetFileContent(fileKey []byte, fileLength int, contentStart uuid.UUID, currentRound int) (content []byte, err error) {
 	currentUUID := contentStart
@@ -1762,12 +1764,13 @@ func (userdata *User) StoreFile(filename string, content []byte) (err error) {
 		if err != nil {
 			return err
 		}
-		updateProtectedFile, err := UpdateFileLength(int64(len(content)), int64(oldFileLength), contentStart, fileKey, protectedFile)
+		updated, updateProtectedFile, err := UpdateFileLength(int64(len(content)), int64(oldFileLength), contentStart, fileKey, protectedFile)
 		if err != nil {
 			return err
 		}
-		userlib.DatastoreSet(fileStructUUID, updateProtectedFile)
-
+		if updated == 1 {
+			userlib.DatastoreSet(fileStructUUID, updateProtectedFile)
+		}
 		err = SetFileContent(fileKey, contentStart, len(content), content, 0)
 		if err != nil {
 			return err
