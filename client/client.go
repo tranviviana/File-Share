@@ -923,6 +923,7 @@ func AccessA(personalFirstKey []byte, protectedAstruct []byte) (CommsKey []byte,
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
+	//error here with unmarshaling
 	var tempCommsChannel uuid.UUID
 	err = json.Unmarshal(byteCommsChannel, &tempCommsChannel)
 	if err != nil {
@@ -1154,14 +1155,47 @@ func CreateSharedCCKey(filename string, username []byte, recipient string, rando
 }
 func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, username []byte, recipient string) (communicationLocation uuid.UUID, protectedRecipientCC []byte, ccKey []byte, err error) {
 	// used by owner to copy their CC struct to share with a new user
-	fileKey, fileStructUUID, randomCommsUUID, err := AccessCC(personalFirstKey, protectedCC)
+	protectedCopied := make([]byte, len(protectedCC))
+	_ = copy(protectedCopied, protectedCC)
+	oGFileKey, oGfileStructUUID, oGRandomCommsUUID, err := AccessCC(personalFirstKey, protectedCopied)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	ccKey, communicationLocation, err = CreateSharedCCKey(filename, username, recipient, randomCommsUUID)
+	fileKey := make([]byte, len(protectedCC))
+	_ = copy(fileKey, oGFileKey)
+	randomCommsUUID := make([]byte, len(oGRandomCommsUUID))
+	_ = copy(randomCommsUUID, oGRandomCommsUUID)
+	byteoGfileStructUUID, err := json.Marshal(oGfileStructUUID)
+	if err != nil {
+		return uuid.Nil, nil, nil, errors.New("file struct uuid marshalling")
+	}
+	byteFileStruct := make([]byte, len(byteoGfileStructUUID))
+	_ = copy(byteFileStruct, byteoGfileStructUUID)
+	var tempFileStruct uuid.UUID
+	err = json.Unmarshal(byteFileStruct, &tempFileStruct)
+	if err != nil {
+		return uuid.Nil, nil, nil, errors.New("unmarshal file struct")
+	}
+	fileStructUUID := tempFileStruct
+	oGccKey, oGcommunicationLocation, err := CreateSharedCCKey(filename, username, recipient, randomCommsUUID)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
+	ccKey = make([]byte, len(oGccKey))
+	_ = copy(ccKey, oGccKey)
+	byteOgComm, err := json.Marshal(oGcommunicationLocation)
+	if err != nil {
+		return uuid.Nil, nil, nil, errors.New("marshal of comm location")
+	}
+	byteCommunicationLocation := make([]byte, len(byteOgComm))
+	_ = copy(byteCommunicationLocation, byteOgComm)
+	var tempCommLocation uuid.UUID
+	err = json.Unmarshal(byteCommunicationLocation, &tempCommLocation)
+	if err != nil {
+		return uuid.Nil, nil, nil, errors.New("unmarshal recipient uuid")
+	}
+	communicationLocation = tempCommLocation
+
 	var recipientCC CommunicationsChannel
 
 	//encrypting file key same way as owner CC so easier to decrypt
@@ -1178,7 +1212,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 		return uuid.Nil, nil, nil, err
 	}
 
-	byteFileStruct, err := json.Marshal(fileStructUUID)
+	byteFileStruct, err = json.Marshal(fileStructUUID)
 	if err != nil {
 		return uuid.Nil, nil, nil, errors.New("could not marshale the file struct uuid")
 	}
@@ -1196,11 +1230,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	}
 	//not actually gonna be used by recipients tho
 	byteRandomCommsUUID := make([]byte, 0)
-	/*stringRandomCommsUUID := hex.EncodeToString(byteRandomCommsUUID)
-	byteStringRandomComms, err := json.Marshal(stringRandomCommsUUID)
-	if err != nil {
-		return uuid.Nil, nil, nil, errors.New("could not marshal randomCommsUUID")
-	} */
+
 	encryptionRandomCommsUUID, err := ConstructKey("encryption for random comms UUID", "could not create encryption key for the comms UUID", ccKey)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
@@ -1216,7 +1246,7 @@ func CreateCopyCC(protectedCC []byte, personalFirstKey []byte, filename string, 
 	//putting into the recipient's CC struct
 	recipientCC.FileKey = protectedFileKey
 	recipientCC.FileStruct = protectedFileUUID
-	recipientCC.FileStruct = protectedBaseCommsUUID
+	recipientCC.SharingBytes = protectedBaseCommsUUID
 
 	// hiding the struct and marshaling
 	byteRecipientCC, err := json.Marshal(recipientCC)
@@ -1380,7 +1410,7 @@ func DecryptInvitation(privateKey userlib.PrivateKeyType, invitationStruct []byt
 	if err != nil {
 		return nil, errors.New("verification failed in retrieving key, cannot trust")
 	}
-	ccKey, err := userlib.PKEDec(privateKey, encryptedCC)
+	ccKey, err := userlib.PKEDec(privateKey, encryptedCCKey)
 	if err != nil {
 		return nil, errors.New("could not decrypt CC key")
 	}
@@ -1826,21 +1856,20 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 	var recipientCClocation uuid.UUID
 	if owner {
 		//within file space?
-		CommunicationsChannelUUID := personalFirstUUID
-		protectedCC, ok := userlib.DatastoreGet(CommunicationsChannelUUID)
-		if !ok {
-			return uuid.Nil, errors.New("owner's CC issue")
-		}
+		protectedCC := make([]byte, len(protectedFirst))
+		_ = copy(protectedCC, protectedFirst)
 		//used to access username list in datasotre
 		_, _, byteSharingBytes, err := AccessCC(personalFirstKey, protectedCC)
 		if err != nil {
 			return uuid.Nil, err
 		}
 		//create a new copy of CC for the recipient
-		recipientCClocation, protectedRecipientCC, tempccKey, err := CreateCopyCC(protectedCC, personalFirstKey, filename, userdata.username, recipientUsername)
+		tempRLocation, protectedRecipientCC, tempccKey, err := CreateCopyCC(protectedCC, personalFirstKey, filename, userdata.username, recipientUsername)
 		if err != nil {
 			return uuid.Nil, err
 		}
+		recipientCClocation = tempRLocation
+		_ = copy(protectedFirst, protectedCC)
 		ccKey = tempccKey
 		//putting new communications channel in datastore
 		userlib.DatastoreSet(recipientCClocation, protectedRecipientCC)
