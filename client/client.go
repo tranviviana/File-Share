@@ -1890,6 +1890,7 @@ func (userdata *User) AppendToFile(filename string, content []byte) error {
 	} else {
 		//last block filled
 		//ex 65 bytes of previous content, curr block = 1
+		currentBlock = (fileLength / 64)
 		oldContent, err := GetFileContent(fileKey, fileLength, contentPtr, currentBlock)
 		if err != nil {
 			return err
@@ -2043,7 +2044,7 @@ func (userdata *User) CreateInvitation(filename string, recipientUsername string
 		// added the username back in
 		userlib.DatastoreSet(usernameUUID, reprotectedUsername)
 		//reversible invitation UUID
-		invitationKey, err := ConstructKey("invitation variation", "could not construct key for invitation ", byteSharingBytes)
+		invitationKey, err := ConstructKey("invitation variation"+recipientUsername, "could not construct key for invitation ", byteSharingBytes)
 		if err != nil {
 			return uuid.Nil, err
 		}
@@ -2192,7 +2193,8 @@ func (userdata *User) RevokeAccess(filename string, recipientUsername string) er
 		return errors.New("file wasn't shared with user")
 	}
 	//case where the person was given an invitation and hasnt accepted yet
-	invitationKey, err := ConstructKey("invitation variation", "could not construct key for invitation ", randomCommsUUID)
+
+	invitationKey, err := ConstructKey("invitation variation"+recipientUsername, "could not construct key for invitation ", randomCommsUUID)
 	if err != nil {
 		return err
 	}
