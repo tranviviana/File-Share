@@ -4,6 +4,7 @@ Changes Made in client/client.go, client_test/client_test.go
 
 Context: 
 Design a system that allows users to securely store and share files in the presence of attackers.
+
 Problems to Solve: The system must be able to create a new user, let the user log in, store files with a filename and file contents, load the file, add to the existing file maintaining bandwidth, generate a unique invitation for target users, allow users to accept the invitation and relabel it with a new filename, and the ability to revoke access from the owner to direct descendents. In addition to this, the program must be able to detect changes in its database BEFORE information is stored and alert the user.
 
 Givens: 
