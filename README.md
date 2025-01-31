@@ -13,6 +13,7 @@ Givens:
 * There is a secure third party to send shared invitations
 * There are no concurrency issues
 * Adversaries like the ones that attack the database or try to get access to a revoked file do not collude
+* All Users must be unique
 
 Design Doc:
 https://docs.google.com/document/d/1ccsrBrP9gO5fllXj4q7VFRRKE6NkKiEtW3IKCTI1Y9Y/edit?tab=t.0#heading=h.ltxemz5n3xbn
