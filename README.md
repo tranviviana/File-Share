@@ -19,11 +19,17 @@ Givens:
 Design Doc:
 https://docs.google.com/document/d/1ccsrBrP9gO5fllXj4q7VFRRKE6NkKiEtW3IKCTI1Y9Y/edit?tab=t.0#heading=h.ltxemz5n3xbn
 
-Code Explanation:
+Code Explanation and Specific Collaboration Explanation:
 https://tinyurl.com/capella-space
 
 Growth:
 This final design is our third iteration to solve this problem. Some improvements include us growing from directly storing all information in the datastore to algorithmically rederiving keys, from storing all shared users in a list to creating a tree-like structure of users and their filenames, and from creating nodes of the tree each time a user shares to one pointer that directs to all the descendants if you are the owner or a pointer to your shared node if you are a user.
+
+Collaboration:
+
+I was in charge of the final iteration of the design, creating many of the helper functions to supplement the design. 
+Cameron was in charge of many of the test cases a long with the reverse direction of our design (e.g. loading the information after storing the information.)
+
 
 
 Key Learning Points:
